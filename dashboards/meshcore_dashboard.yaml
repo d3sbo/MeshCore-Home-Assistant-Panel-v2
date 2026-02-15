@@ -1,0 +1,106 @@
+# Example MeshCore Dashboard Configuration
+# Add this to your Lovelace dashboard
+
+views:
+  - title: MeshCore
+    path: meshcore
+    icon: mdi:radio-tower
+    cards:
+      # Map selector and threshold controls
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-select-card
+            entity: input_select.meshcore_sort_by
+            icon: mdi:sort
+            fill_container: false
+          
+          # Show threshold slider based on selection
+          - type: conditional
+            conditions:
+              - entity: input_select.meshcore_sort_by
+                state: Last Advert
+            card:
+              type: custom:mushroom-number-card
+              entity: input_number.meshcore_advert_threshold_hours
+          
+          - type: conditional
+            conditions:
+              - entity: input_select.meshcore_sort_by
+                state: Last Message
+            card:
+              type: custom:mushroom-number-card
+              entity: input_number.meshcore_heatmap_threshold_hours
+          
+          - type: conditional
+            conditions:
+              - entity: input_select.meshcore_sort_by
+                state: Direct Links
+            card:
+              type: custom:mushroom-number-card
+              entity: input_number.meshcore_heatmap_threshold_hours
+
+          # Conditional maps based on selection
+          - type: conditional
+            conditions:
+              - entity: input_select.meshcore_sort_by
+                state: Last Advert
+            card:
+              type: iframe
+              url: /local/meshcore_nodemap.html
+              aspect_ratio: "4:3"
+          
+          - type: conditional
+            conditions:
+              - entity: input_select.meshcore_sort_by
+                state: Last Message
+            card:
+              type: iframe
+              url: /local/meshcore_heatmap.html
+              aspect_ratio: "4:3"
+          
+          - type: conditional
+            conditions:
+              - entity: input_select.meshcore_sort_by
+                state: Direct Links
+            card:
+              type: iframe
+              url: /local/meshcore_directlinks.html
+              aspect_ratio: "4:3"
+        grid_options:
+          columns: 24
+          rows: auto
+
+      # Contact management card
+      - type: entities
+        title: Manage Contacts
+        entities:
+          - entity: select.meshcore_discovered_contact
+            name: Discovered
+            secondary_info: last-changed
+          - type: button
+            name: ➕ Add Contact
+            action_name: Add
+            tap_action:
+              action: call-service
+              service: meshcore.add_selected_contact
+          - type: button
+            name: 🗑️ Remove Discovered
+            action_name: Remove
+            tap_action:
+              action: call-service
+              service: meshcore.remove_discovered_contact
+          - entity: select.meshcore_added_contact
+            name: Added
+            secondary_info: last-changed
+          - type: button
+            name: ➖ Remove Contact
+            action_name: Remove
+            tap_action:
+              action: call-service
+              service: meshcore.remove_selected_contact
+          - type: button
+            name: 🧹 Cleanup Unavailable
+            action_name: Cleanup
+            tap_action:
+              action: call-service
+              service: meshcore.cleanup_unavailable_contacts

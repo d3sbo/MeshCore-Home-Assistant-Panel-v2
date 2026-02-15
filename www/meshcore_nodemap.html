@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeshCore Node Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+    }
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
+    .stats {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 12px;
+    }
+    .stats h3 {
+      color: #60a5fa;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .stat-row {
+      margin: 4px 0;
+      color: #aaa;
+    }
+    .stat-value {
+      color: #fff;
+      font-weight: bold;
+    }
+    .legend {
+      position: absolute;
+      bottom: 20px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 11px;
+    }
+    .legend-title {
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #60a5fa;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 4px 0;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .legend-item:hover {
+      background: rgba(96, 165, 250, 0.2);
+    }
+    .legend-item.hidden {
+      opacity: 0.4;
+    }
+    .legend-icon {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .legend-count {
+      margin-left: auto;
+      color: #888;
+    }
+    .info-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 15px;
+      border-radius: 8px;
+      z-index: 1000;
+      max-width: 280px;
+      max-height: 400px;
+      overflow-y: auto;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    .info-panel h3 {
+      margin-bottom: 10px;
+      color: #60a5fa;
+      font-size: 14px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+    }
+    .node-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #2a2a4a;
+      font-size: 12px;
+    }
+    .node-item:last-child {
+      border-bottom: none;
+    }
+    .node-icon-small {
+      font-size: 14px;
+    }
+    .node-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .node-name:hover {
+      color: #60a5fa;
+    }
+    .node-age {
+      color: #888;
+      font-size: 10px;
+    }
+    /* Pulsing ring animation */
+    @keyframes pulse-ring {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(4);
+        opacity: 0;
+      }
+    }
+    .pulse-ring {
+      border-radius: 50%;
+      animation: pulse-ring 1.5s ease-out forwards;
+      pointer-events: none;
+    }
+    /* Dark map tiles */
+    .leaflet-tile-pane {
+      filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.2);
+    }
+    .leaflet-control-attribution {
+      background: rgba(30, 30, 50, 0.8) !important;
+      color: #666 !important;
+    }
+    .leaflet-control-attribution a {
+      color: #888 !important;
+    }
+    .node-icon {
+      background: transparent;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  
+  <div class="stats">
+    <h3>📍 MeshCore Node Map</h3>
+    <div class="stat-row">Time Window: <span class="stat-value" id="threshold-hours">--</span>h</div>
+    <div class="stat-row">Total Nodes: <span class="stat-value" id="node-count">0</span></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-title">Node Types (click to toggle)</div>
+    <div class="legend-item" data-type="repeater" onclick="toggleType('repeater')">
+      <div class="legend-icon">📡</div>
+      <span>Repeater</span>
+      <span class="legend-count" id="count-repeater">0</span>
+    </div>
+    <div class="legend-item" data-type="client" onclick="toggleType('client')">
+      <div class="legend-icon">📱</div>
+      <span>Client</span>
+      <span class="legend-count" id="count-client">0</span>
+    </div>
+    <div class="legend-item" data-type="room server" onclick="toggleType('room server')">
+      <div class="legend-icon">💬</div>
+      <span>Room Server</span>
+      <span class="legend-count" id="count-room server">0</span>
+    </div>
+    <div class="legend-item" data-type="unknown" onclick="toggleType('unknown')">
+      <div class="legend-icon">❓</div>
+      <span>Unknown</span>
+      <span class="legend-count" id="count-unknown">0</span>
+    </div>
+  </div>
+
+  <div class="info-panel">
+    <h3>📋 Recent Nodes</h3>
+    <div id="node-list"></div>
+  </div>
+
+  <script>
+    // Initialize map centered on UK
+    const map = L.map('map', {
+      center: [52.3, 0],
+      zoom: 9,
+      zoomControl: true
+    });
+
+    // Dark map tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let nodeData = [];
+    let markers = {};  // Keyed by node type
+    let visibleTypes = {
+      'repeater': true,
+      'client': true,
+      'room server': true,
+      'unknown': true
+    };
+    let lastDataHash = '';
+    let pulseMarkers = [];
+
+    function highlightNode(nodeName, lat, lon) {
+      // Remove previous pulses
+      pulseMarkers.forEach(m => map.removeLayer(m));
+      pulseMarkers = [];
+      
+      // Pan to the node (no zoom change)
+      map.panTo([lat, lon]);
+      
+      // Create pulsing rings using circle markers
+      const color = '#60a5fa';
+      
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          let radius = 30;
+          const ring = L.circleMarker([lat, lon], {
+            radius: radius,
+            fillColor: 'transparent',
+            color: color,
+            weight: 3,
+            opacity: 1,
+            fillOpacity: 0
+          }).addTo(map);
+          
+          pulseMarkers.push(ring);
+          
+          // Animate the ring shrinking
+          const startTime = Date.now();
+          const duration = 1000;
+          
+          function animate() {
+            const elapsed = Date.now() - startTime;
+            const progress = elapsed / duration;
+            
+            if (progress < 1) {
+              const newRadius = 30 * (1 - progress);
+              const newOpacity = 1 - progress;
+              ring.setRadius(newRadius);
+              ring.setStyle({ opacity: newOpacity });
+              requestAnimationFrame(animate);
+            } else {
+              map.removeLayer(ring);
+              pulseMarkers = pulseMarkers.filter(m => m !== ring);
+            }
+          }
+          
+          requestAnimationFrame(animate);
+        }, i * 250);
+      }
+    }
+
+    function getDataHash(data, threshold) {
+      return JSON.stringify(data.length) + (threshold || '');
+    }
+
+    function getIcon(nodeType) {
+      if (nodeType.includes('repeater')) return '📡';
+      if (nodeType.includes('client')) return '📱';
+      if (nodeType.includes('room') || nodeType.includes('server')) return '💬';
+      return '❓';
+    }
+
+    function getColor(nodeType) {
+      if (nodeType.includes('repeater')) return '#22c55e';  // Green
+      if (nodeType.includes('client')) return '#3b82f6';    // Blue
+      if (nodeType.includes('room') || nodeType.includes('server')) return '#a855f7';  // Purple
+      return '#888888';  // Gray
+    }
+
+    function getTypeKey(nodeType) {
+      if (nodeType.includes('repeater')) return 'repeater';
+      if (nodeType.includes('client')) return 'client';
+      if (nodeType.includes('room') || nodeType.includes('server')) return 'room server';
+      return 'unknown';
+    }
+
+    function toggleType(type) {
+      visibleTypes[type] = !visibleTypes[type];
+      
+      // Update legend item style
+      const item = document.querySelector(`.legend-item[data-type="${type}"]`);
+      if (item) {
+        item.classList.toggle('hidden', !visibleTypes[type]);
+      }
+      
+      // Update marker visibility
+      if (markers[type]) {
+        markers[type].forEach(marker => {
+          if (visibleTypes[type]) {
+            marker.setStyle({ opacity: 1, fillOpacity: 0.9 });
+          } else {
+            marker.setStyle({ opacity: 0, fillOpacity: 0 });
+          }
+        });
+      }
+    }
+
+    function updateMap(fitBounds = false) {
+      // Clear existing markers
+      Object.values(markers).flat().forEach(m => map.removeLayer(m));
+      markers = {
+        'repeater': [],
+        'client': [],
+        'room server': [],
+        'unknown': []
+      };
+
+      if (nodeData.length === 0) return;
+
+      // Update stats
+      document.getElementById('node-count').textContent = nodeData.length;
+
+      // Count by type
+      const typeCounts = { 'repeater': 0, 'client': 0, 'room server': 0, 'unknown': 0 };
+
+      // Add markers
+      nodeData.forEach(node => {
+        const typeKey = getTypeKey(node.node_type);
+        const color = getColor(node.node_type);
+        const icon = getIcon(node.node_type);
+        
+        typeCounts[typeKey]++;
+
+        const marker = L.circleMarker([node.lat, node.lon], {
+          radius: 5,
+          fillColor: color,
+          color: '#000',
+          weight: 1,
+          opacity: visibleTypes[typeKey] ? 1 : 0,
+          fillOpacity: visibleTypes[typeKey] ? 0.9 : 0
+        }).addTo(map);
+
+        marker.bindPopup(`
+          <div style="text-align: center;">
+            <span style="font-size: 24px;">${icon}</span><br>
+            <strong>${node.name}</strong><br>
+            <span style="font-size: 11px; color: #888;">${node.node_type}</span><br>
+            <span style="font-size: 11px; color: #888;">${node.age_hours}h ago</span>
+          </div>
+        `);
+
+        markers[typeKey].push(marker);
+      });
+
+      // Update type counts in legend
+      Object.keys(typeCounts).forEach(type => {
+        const el = document.getElementById(`count-${type}`);
+        if (el) el.textContent = typeCounts[type];
+      });
+
+      // Update node list (most recent first)
+      const nodeList = document.getElementById('node-list');
+      const sortedByAge = [...nodeData].sort((a, b) => a.age_hours - b.age_hours);
+      
+      nodeList.innerHTML = sortedByAge.slice(0, 20).map(node => {
+        const icon = getIcon(node.node_type);
+        const safeName = node.name.replace(/'/g, "\\'");
+        return `
+          <div class="node-item">
+            <span class="node-icon-small">${icon}</span>
+            <span class="node-name" title="${node.name}" onclick="highlightNode('${safeName}', ${node.lat}, ${node.lon})">${node.name}</span>
+            <span class="node-age">${node.age_hours}h</span>
+          </div>
+        `;
+      }).join('');
+
+      // Fit bounds on initial load
+      if (fitBounds && nodeData.length > 1) {
+        const bounds = L.latLngBounds(nodeData.map(d => [d.lat, d.lon]));
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    // Load data
+    fetch('/local/meshcore_nodemap_data.json')
+      .then(response => response.json())
+      .then(data => {
+        if (data.nodes && Array.isArray(data.nodes)) {
+          nodeData = data.nodes;
+          if (data.threshold_hours) {
+            document.getElementById('threshold-hours').textContent = data.threshold_hours;
+          }
+          lastDataHash = getDataHash(nodeData, data.threshold_hours);
+          updateMap(true);
+        }
+      })
+      .catch(err => {
+        console.log('No data file found:', err);
+      });
+
+    // Auto-refresh every 10 seconds
+    setInterval(() => {
+      fetch('/local/meshcore_nodemap_data.json?t=' + Date.now())
+        .then(response => response.json())
+        .then(data => {
+          if (data.nodes && Array.isArray(data.nodes)) {
+            const newHash = getDataHash(data.nodes, data.threshold_hours);
+            
+            if (data.threshold_hours) {
+              document.getElementById('threshold-hours').textContent = data.threshold_hours;
+            }
+            
+            if (newHash !== lastDataHash) {
+              nodeData = data.nodes;
+              lastDataHash = newHash;
+              updateMap(false);
+            }
+          }
+        })
+        .catch(err => console.log('Refresh failed:', err));
+    }, 10000);
+  </script>
+</body>
+</html>

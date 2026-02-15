@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeshCore Hop Frequency Heatmap</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+    }
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
+    .info-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 15px;
+      border-radius: 8px;
+      z-index: 1000;
+      max-width: 280px;
+      max-height: 400px;
+      overflow-y: auto;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    .info-panel h3 {
+      margin-bottom: 10px;
+      color: #60a5fa;
+      font-size: 14px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+    }
+    .node-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #2a2a4a;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .node-item:hover {
+      background: rgba(96, 165, 250, 0.2);
+    }
+    .node-item.active {
+      background: rgba(96, 165, 250, 0.3);
+    }
+    .node-item:last-child {
+      border-bottom: none;
+    }
+    .node-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .node-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .node-count {
+      color: #888;
+      font-weight: bold;
+    }
+    .legend {
+      position: absolute;
+      bottom: 20px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 11px;
+    }
+    .legend-title {
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #60a5fa;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 4px 0;
+    }
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+    }
+    .stats {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 12px;
+    }
+    .stats h3 {
+      color: #60a5fa;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .stat-row {
+      margin: 4px 0;
+      color: #aaa;
+    }
+    .stat-value {
+      color: #fff;
+      font-weight: bold;
+    }
+    /* Dark map tiles */
+    .leaflet-tile-pane {
+      filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.2);
+    }
+    .leaflet-control-attribution {
+      background: rgba(30, 30, 50, 0.8) !important;
+      color: #666 !important;
+    }
+    .leaflet-control-attribution a {
+      color: #888 !important;
+    }
+    .node-icon {
+      background: transparent;
+      border: none;
+    }
+    .node-icon svg {
+      filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  
+  <div class="stats">
+    <h3>📡 Hop Frequency Heatmap</h3>
+    <div class="stat-row">Time Window: <span class="stat-value" id="threshold-hours">--</span>h</div>
+    <div class="stat-row">Nodes: <span class="stat-value" id="node-count">0</span></div>
+    <div class="stat-row">Paths: <span class="stat-value" id="path-count">0</span></div>
+    <div class="stat-row">Total Traffic: <span class="stat-value" id="total-traffic">0</span></div>
+    <div class="stat-row">Max Uses: <span class="stat-value" id="max-uses">0</span></div>
+  </div>
+
+  <div class="info-panel">
+    <h3 id="toggle-icons" style="cursor: pointer;">🔥 Top Hop Nodes <span id="icons-status">(visible)</span></h3>
+    <div id="node-list"></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-title">Traffic Intensity</div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #0000ff;"></div>
+      <span>Low</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #00ffff;"></div>
+      <span>Light</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #00ff00;"></div>
+      <span>Medium</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #ffff00;"></div>
+      <span>High</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #ff0000;"></div>
+      <span>Very High</span>
+    </div>
+  </div>
+
+  <script>
+    // Initialize map centered on UK
+    const map = L.map('map', {
+      center: [52.3, 0],
+      zoom: 9,
+      zoomControl: true
+    });
+
+    // Dark map tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // Hop data - loaded from AppDaemon-generated JSON file
+    let hopData = [];
+
+    // Try to load data from external JSON file (generated by AppDaemon)
+    fetch('/local/meshcore_heatmap_data.json')
+      .then(response => response.json())
+      .then(data => {
+        // Handle new format with metadata
+        if (data.nodes && Array.isArray(data.nodes)) {
+          hopData = data.nodes;
+          pathData = data.paths || [];
+          if (data.threshold_hours) {
+            document.getElementById('threshold-hours').textContent = data.threshold_hours;
+          }
+          lastDataHash = getDataHash(hopData, pathData, data.threshold_hours);
+        } else if (Array.isArray(data) && data.length > 0) {
+          // Old format - just array of nodes
+          hopData = data;
+          pathData = [];
+          lastDataHash = getDataHash(hopData, pathData, null);
+        }
+        updateMap(true); // Fit bounds on initial load
+      })
+      .catch(err => {
+        console.log('Using sample data - no external data file found');
+        updateMap(true);
+      });
+
+    let heatLayer = null;
+    let markers = [];
+    let pathLines = [];
+    let lastDataHash = '';
+    let initialLoadDone = false;
+    let pathData = [];
+
+    function getColor(ratio) {
+      if (ratio < 0.2) return '#0000ff';  // Blue
+      if (ratio < 0.4) return '#00ffff';  // Cyan
+      if (ratio < 0.6) return '#00ff00';  // Green
+      if (ratio < 0.8) return '#ffff00';  // Yellow
+      return '#ff0000';  // Red
+    }
+
+    let selectedNode = null;
+    let iconsVisible = true;
+
+    function toggleIcons() {
+      iconsVisible = !iconsVisible;
+      markers.forEach(marker => {
+        marker.setStyle({
+          opacity: iconsVisible ? 1 : 0,
+          fillOpacity: iconsVisible ? 0.9 : 0
+        });
+      });
+      document.getElementById('icons-status').textContent = iconsVisible ? '(visible)' : '(hidden)';
+    }
+
+    // Add click handler for toggle
+    document.getElementById('toggle-icons').addEventListener('click', toggleIcons);
+
+    function highlightNodePaths(nodeName) {
+      // Toggle selection
+      if (selectedNode === nodeName) {
+        selectedNode = null;
+      } else {
+        selectedNode = nodeName;
+      }
+      
+      // Update node list active state
+      document.querySelectorAll('.node-item').forEach(item => {
+        if (item.dataset.nodeName === selectedNode) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+      
+      // Update path line styles
+      pathLines.forEach(line => {
+        if (selectedNode === null) {
+          // Hide all lines
+          line.setStyle({ opacity: 0 });
+        } else if (line.pathNodes && line.pathNodes.includes(selectedNode)) {
+          // Show paths through this node - dotted lines
+          line.setStyle({ 
+            dashArray: '8, 8', 
+            weight: 3, 
+            opacity: 0.8 
+          });
+          line.bringToFront();
+        } else {
+          // Hide other paths
+          line.setStyle({ opacity: 0 });
+        }
+      });
+    }
+
+    function getDataHash(nodes, paths, threshold) {
+      // Simple hash to detect data changes - include threshold
+      const nodeHash = JSON.stringify(nodes.map(d => d.name + d.use_count)).substring(0, 100);
+      const pathHash = paths ? JSON.stringify(paths.length) : '0';
+      const thresholdHash = threshold ? threshold.toString() : '0';
+      return nodeHash + pathHash + thresholdHash;
+    }
+
+    function updateMap(fitBounds = false) {
+      // Clear existing layers
+      if (heatLayer) map.removeLayer(heatLayer);
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+      pathLines.forEach(p => map.removeLayer(p));
+      pathLines = [];
+
+      if (hopData.length === 0) return;
+
+      const maxCount = Math.max(...hopData.map(d => d.use_count));
+      const totalTraffic = hopData.reduce((sum, d) => sum + d.use_count, 0);
+
+      // Update stats
+      document.getElementById('node-count').textContent = hopData.length;
+      document.getElementById('path-count').textContent = pathData.length;
+      document.getElementById('total-traffic').textContent = totalTraffic;
+      document.getElementById('max-uses').textContent = maxCount;
+
+      // Draw path lines but hide them by default
+      // Color based on hop count (fewer hops = hotter/more direct)
+      const maxHops = Math.max(...pathData.map(p => p.hops), 1);
+      pathData.forEach((path, idx) => {
+        if (path.coords && path.coords.length >= 2) {
+          const latlngs = path.coords.map(c => [c.lat, c.lon]);
+          // Invert ratio - fewer hops = higher intensity (red), more hops = lower (blue)
+          const ratio = 1 - ((path.hops - 2) / Math.max(maxHops - 2, 1));
+          const color = getColor(ratio);
+          
+          const polyline = L.polyline(latlngs, {
+            color: color,
+            weight: 3,
+            opacity: 0,  // Hidden by default
+            dashArray: '8, 8'
+          }).addTo(map);
+          
+          // Store node names this path goes through for highlighting
+          polyline.pathNodes = path.coords.map(c => c.name);
+          polyline.sender = path.sender;
+          polyline.pathColor = color;
+          
+          polyline.bindPopup(`
+            <div style="text-align: center;">
+              <strong>${path.sender}</strong><br>
+              <span style="color: ${color}; font-size: 18px; font-weight: bold;">
+                ${path.hops}
+              </span> hops
+            </div>
+          `);
+          
+          pathLines.push(polyline);
+        }
+      });
+
+      // Create heatmap data
+      // Format: [lat, lon, intensity]
+      const heatData = hopData.map(node => [
+        node.lat,
+        node.lon,
+        node.use_count / maxCount // Normalized intensity
+      ]);
+
+      // Add heatmap layer - smooth gradient style
+      heatLayer = L.heatLayer(heatData, {
+        radius: 50,
+        blur: 35,
+        maxZoom: 10,
+        max: 1.0,
+        minOpacity: 0.3,
+        gradient: {
+          0.0: '#0000ff',  // Blue
+          0.25: '#00ffff', // Cyan
+          0.5: '#00ff00',  // Green
+          0.75: '#ffff00', // Yellow
+          1.0: '#ff0000'   // Red
+        }
+      }).addTo(map);
+
+      // Add simple circle markers
+      hopData.forEach(node => {
+        const ratio = node.use_count / maxCount;
+        const color = getColor(ratio);
+        
+        const marker = L.circleMarker([node.lat, node.lon], {
+          radius: 4,
+          fillColor: color,
+          color: '#000',
+          weight: 1,
+          opacity: iconsVisible ? 1 : 0,
+          fillOpacity: iconsVisible ? 0.9 : 0
+        }).addTo(map);
+
+        marker.bindPopup(`
+          <div style="text-align: center;">
+            <strong>${node.name}</strong><br>
+            <span style="color: ${color}; font-size: 18px; font-weight: bold;">
+              ${node.use_count}
+            </span> uses
+          </div>
+        `);
+
+        markers.push(marker);
+      });
+
+      // Update node list with clickable items
+      const nodeList = document.getElementById('node-list');
+      const sortedNodes = [...hopData].sort((a, b) => b.use_count - a.use_count);
+      
+      nodeList.innerHTML = sortedNodes.slice(0, 15).map((node, idx) => {
+        const ratio = node.use_count / maxCount;
+        const color = getColor(ratio);
+        return `
+          <div class="node-item" data-node-name="${node.name}" onclick="highlightNodePaths('${node.name.replace(/'/g, "\\'")}')">
+            <div class="node-dot" style="background: ${color};"></div>
+            <span class="node-name" title="${node.name}">${node.name}</span>
+            <span class="node-count">${node.use_count}</span>
+          </div>
+        `;
+      }).join('');
+
+      // Only fit bounds on initial load
+      if (fitBounds && hopData.length > 1) {
+        const bounds = L.latLngBounds(hopData.map(d => [d.lat, d.lon]));
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    // Auto-refresh every 10 seconds - only update if data changed
+    setInterval(() => {
+      fetch('/local/meshcore_heatmap_data.json?t=' + Date.now())
+        .then(response => response.json())
+        .then(data => {
+          let newData = [];
+          let newPaths = [];
+          let newThreshold = null;
+          
+          if (data.nodes && Array.isArray(data.nodes)) {
+            newData = data.nodes;
+            newPaths = data.paths || [];
+            newThreshold = data.threshold_hours;
+          } else if (Array.isArray(data) && data.length > 0) {
+            newData = data;
+          }
+          
+          // Always update threshold display
+          if (newThreshold) {
+            document.getElementById('threshold-hours').textContent = newThreshold;
+          }
+          
+          // Only redraw map if data actually changed (including threshold)
+          const newHash = getDataHash(newData, newPaths, newThreshold);
+          if (newHash !== lastDataHash) {
+            hopData = newData;
+            pathData = newPaths;
+            lastDataHash = newHash;
+            updateMap(false); // Don't fit bounds on refresh
+          }
+        })
+        .catch(err => console.log('Refresh failed:', err));
+    }, 10000);
+  </script>
+</body>
+</html>

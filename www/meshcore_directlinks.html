@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeshCore Direct Links</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+    }
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
+    .stats {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 12px;
+    }
+    .stats h3 {
+      color: #a855f7;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .stat-row {
+      margin: 4px 0;
+      color: #aaa;
+    }
+    .stat-value {
+      color: #fff;
+      font-weight: bold;
+    }
+    .legend {
+      position: absolute;
+      bottom: 20px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 11px;
+    }
+    .legend-title {
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #a855f7;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 4px 0;
+    }
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .info-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 15px;
+      border-radius: 8px;
+      z-index: 1000;
+      max-width: 250px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .info-panel h3 {
+      margin-bottom: 10px;
+      color: #a855f7;
+      font-size: 14px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+      cursor: pointer;
+    }
+    .node-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid #2a2a4a;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .node-item:hover {
+      background: rgba(168, 85, 247, 0.2);
+    }
+    .node-item.active {
+      background: rgba(168, 85, 247, 0.3);
+    }
+    .node-item:last-child {
+      border-bottom: none;
+    }
+    .node-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .node-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .node-count {
+      color: #a855f7;
+      font-weight: bold;
+    }
+    /* Dark map tiles */
+    .leaflet-tile-pane {
+      filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.2);
+    }
+    .leaflet-control-attribution {
+      background: rgba(30, 30, 50, 0.8) !important;
+      color: #666 !important;
+    }
+    .leaflet-control-attribution a {
+      color: #888 !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  
+  <div class="stats">
+    <h3>🔗 Direct Links Heatmap</h3>
+    <div class="stat-row">Time Window: <span class="stat-value" id="threshold-hours">--</span>h</div>
+    <div class="stat-row">Nodes: <span class="stat-value" id="node-count">0</span></div>
+    <div class="stat-row">Direct Links: <span class="stat-value" id="link-count">0</span></div>
+    <div class="stat-row">Max Links: <span class="stat-value" id="max-links">0</span></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-title">Link Density</div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #0000ff;"></div>
+      <span>1-2 links</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #00ffff;"></div>
+      <span>3-5 links</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #00ff00;"></div>
+      <span>6-10 links</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #ffff00;"></div>
+      <span>11-20 links</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #ff0000;"></div>
+      <span>20+ links</span>
+    </div>
+  </div>
+
+  <div class="info-panel">
+    <h3 id="toggle-links">🔗 Top Connected Nodes <span id="links-status">(lines hidden)</span></h3>
+    <div id="node-list"></div>
+  </div>
+
+  <script>
+    // Initialize map
+    const map = L.map('map', {
+      center: [52.3, 0],
+      zoom: 9,
+      zoomControl: true
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let nodeData = [];
+    let linkData = [];
+    let heatLayer = null;
+    let markers = [];
+    let linkLines = [];
+    let lastDataHash = '';
+    let selectedNode = null;
+    let linksVisible = false;
+
+    function getDataHash(nodes, links, threshold) {
+      const nodeHash = JSON.stringify(nodes.map(d => d.name + d.link_count)).substring(0, 100);
+      const linkHash = links ? JSON.stringify(links.length) : '0';
+      return nodeHash + linkHash + (threshold || '');
+    }
+
+    function getColor(ratio) {
+      if (ratio < 0.2) return '#0000ff';
+      if (ratio < 0.4) return '#00ffff';
+      if (ratio < 0.6) return '#00ff00';
+      if (ratio < 0.8) return '#ffff00';
+      return '#ff0000';
+    }
+
+    function toggleLinks() {
+      linksVisible = !linksVisible;
+      linkLines.forEach(line => {
+        if (linksVisible) {
+          line.setStyle({ opacity: 0.5 });
+        } else {
+          line.setStyle({ opacity: 0 });
+        }
+      });
+      document.getElementById('links-status').textContent = linksVisible ? '(lines visible)' : '(lines hidden)';
+    }
+
+    document.getElementById('toggle-links').addEventListener('click', toggleLinks);
+
+    function highlightNodeLinks(nodeName) {
+      if (selectedNode === nodeName) {
+        selectedNode = null;
+      } else {
+        selectedNode = nodeName;
+      }
+      
+      document.querySelectorAll('.node-item').forEach(item => {
+        if (item.dataset.nodeName === selectedNode) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+      
+      linkLines.forEach(line => {
+        if (selectedNode === null) {
+          line.setStyle({ opacity: linksVisible ? 0.5 : 0 });
+        } else if (line.fromName === selectedNode || line.toName === selectedNode) {
+          line.setStyle({ opacity: 0.9, weight: 3 });
+          line.bringToFront();
+        } else {
+          line.setStyle({ opacity: 0.1 });
+        }
+      });
+    }
+
+    function updateMap(fitBounds = false) {
+      // Clear existing layers
+      if (heatLayer) map.removeLayer(heatLayer);
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+      linkLines.forEach(l => map.removeLayer(l));
+      linkLines = [];
+
+      if (nodeData.length === 0) return;
+
+      const maxLinks = Math.max(...nodeData.map(d => d.link_count), 1);
+      const totalLinks = linkData.length;
+
+      // Update stats
+      document.getElementById('node-count').textContent = nodeData.length;
+      document.getElementById('link-count').textContent = totalLinks;
+      document.getElementById('max-links').textContent = maxLinks;
+
+      // Draw link lines (hidden by default)
+      linkData.forEach(link => {
+        const maxCount = Math.max(...linkData.map(l => l.count), 1);
+        const ratio = link.count / maxCount;
+        const color = getColor(ratio);
+        
+        const polyline = L.polyline(
+          [[link.from_lat, link.from_lon], [link.to_lat, link.to_lon]],
+          {
+            color: color,
+            weight: 2,
+            opacity: 0,
+            dashArray: '5, 5'
+          }
+        ).addTo(map);
+        
+        polyline.fromName = link.from_name;
+        polyline.toName = link.to_name;
+        
+        polyline.bindPopup(`
+          <div style="text-align: center;">
+            <strong>${link.from_name}</strong><br>
+            ↔<br>
+            <strong>${link.to_name}</strong><br>
+            <span style="color: ${color}; font-size: 14px;">${link.count} times</span>
+          </div>
+        `);
+        
+        linkLines.push(polyline);
+      });
+
+      // Create heatmap based on link count
+      const heatData = nodeData.map(node => [
+        node.lat,
+        node.lon,
+        node.link_count / maxLinks
+      ]);
+
+      heatLayer = L.heatLayer(heatData, {
+        radius: 50,
+        blur: 35,
+        maxZoom: 10,
+        max: 1.0,
+        minOpacity: 0.3,
+        gradient: {
+          0.0: '#0000ff',
+          0.25: '#00ffff',
+          0.5: '#00ff00',
+          0.75: '#ffff00',
+          1.0: '#ff0000'
+        }
+      }).addTo(map);
+
+      // Add node markers
+      nodeData.forEach(node => {
+        const ratio = node.link_count / maxLinks;
+        const color = getColor(ratio);
+
+        const marker = L.circleMarker([node.lat, node.lon], {
+          radius: 4,
+          fillColor: color,
+          color: '#000',
+          weight: 1,
+          opacity: 1,
+          fillOpacity: 0.9
+        }).addTo(map);
+
+        marker.bindPopup(`
+          <div style="text-align: center;">
+            <strong>${node.name}</strong><br>
+            <span style="font-size: 11px; color: #888;">${node.node_type}</span><br>
+            <span style="color: ${color}; font-size: 18px; font-weight: bold;">
+              ${node.link_count}
+            </span> direct links
+          </div>
+        `);
+
+        markers.push(marker);
+      });
+
+      // Update node list
+      const nodeList = document.getElementById('node-list');
+      const sortedNodes = [...nodeData].sort((a, b) => b.link_count - a.link_count);
+      
+      nodeList.innerHTML = sortedNodes.map(node => {
+        const ratio = node.link_count / maxLinks;
+        const color = getColor(ratio);
+        return `
+          <div class="node-item" data-node-name="${node.name}" onclick="highlightNodeLinks('${node.name.replace(/'/g, "\\'")}')">
+            <div class="node-dot" style="background: ${color};"></div>
+            <span class="node-name" title="${node.name}">${node.name}</span>
+            <span class="node-count">${node.link_count}</span>
+          </div>
+        `;
+      }).join('');
+
+      if (fitBounds && nodeData.length > 1) {
+        const bounds = L.latLngBounds(nodeData.map(d => [d.lat, d.lon]));
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    // Load initial data
+    fetch('/local/meshcore_directlinks_data.json')
+      .then(response => response.json())
+      .then(data => {
+        if (data.nodes && Array.isArray(data.nodes)) {
+          nodeData = data.nodes;
+          linkData = data.links || [];
+          if (data.threshold_hours) {
+            document.getElementById('threshold-hours').textContent = data.threshold_hours;
+          }
+          lastDataHash = getDataHash(nodeData, linkData, data.threshold_hours);
+          updateMap(true);
+        }
+      })
+      .catch(err => console.log('No data file found:', err));
+
+    // Auto-refresh
+    setInterval(() => {
+      fetch('/local/meshcore_directlinks_data.json?t=' + Date.now())
+        .then(response => response.json())
+        .then(data => {
+          if (data.nodes && Array.isArray(data.nodes)) {
+            const newHash = getDataHash(data.nodes, data.links, data.threshold_hours);
+            
+            if (data.threshold_hours) {
+              document.getElementById('threshold-hours').textContent = data.threshold_hours;
+            }
+            
+            if (newHash !== lastDataHash) {
+              nodeData = data.nodes;
+              linkData = data.links || [];
+              lastDataHash = newHash;
+              updateMap(false);
+            }
+          }
+        })
+        .catch(err => console.log('Refresh failed:', err));
+    }, 10000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+# MeshCore AppDaemon Apps Configuration
+# Add these entries to your /config/appdaemon/apps/apps.yaml
+
+meshcore_hops:
+  module: meshcore_hops
+  class: MeshCoreHops
+
+meshcore_paths:
+  module: meshcore_paths
+  class: MeshCorePathMap
+
+meshcore_cleanup:
+  module: meshcore_cleanup
+  class: MeshCoreCleanup
+
+meshcore_greeter:
+  module: meshcore_greeter
+  class: MeshCoreGreeter
+
+meshcore_heatmap_export:
+  module: meshcore_heatmap_export
+  class: MeshCoreHeatmapExport
+
+meshcore_nodemap_export:
+  module: meshcore_nodemap_export
+  class: MeshCoreNodeMapExport
+
+meshcore_directlinks_export:
+  module: meshcore_directlinks_export
+  class: MeshCoreDirectLinksExport
