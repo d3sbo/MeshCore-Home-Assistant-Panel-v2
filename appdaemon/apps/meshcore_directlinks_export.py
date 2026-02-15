@@ -147,6 +147,7 @@ class MeshCoreDirectLinksExport(hass.Hass):
                 lon = attrs.get("adv_lon") or attrs.get("longitude")
                 name = attrs.get("adv_name") or attrs.get("friendly_name", "").replace(" Contact", "")
                 node_type = attrs.get("node_type_str", "Unknown")
+                last_advert = attrs.get("last_advert", 0)
                 
                 if lat and lon:
                     matches.append({
@@ -154,7 +155,8 @@ class MeshCoreDirectLinksExport(hass.Hass):
                         "lat": float(lat),
                         "lon": float(lon),
                         "pubkey": pubkey,
-                        "node_type": node_type.lower()
+                        "node_type": node_type.lower(),
+                        "last_advert": last_advert or 0
                     })
         
         if not matches:
@@ -164,12 +166,16 @@ class MeshCoreDirectLinksExport(hass.Hass):
         if len(matches) == 1:
             return matches[0]
         
-        # Multiple matches - prefer repeaters over clients/room servers
-        for m in matches:
-            if "repeater" in m["node_type"]:
-                return m
+        # Multiple matches - filter to repeaters first
+        repeaters = [m for m in matches if "repeater" in m["node_type"]]
         
-        # No repeater found, return first match
+        if repeaters:
+            # Multiple repeaters - pick most recently seen
+            repeaters.sort(key=lambda x: x["last_advert"], reverse=True)
+            return repeaters[0]
+        
+        # No repeaters, sort all by last_advert and return most recent
+        matches.sort(key=lambda x: x["last_advert"], reverse=True)
         return matches[0]
 
     def export_directlinks_data(self, *args, **kwargs):
