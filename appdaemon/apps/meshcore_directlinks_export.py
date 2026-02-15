@@ -132,6 +132,8 @@ class MeshCoreDirectLinksExport(hass.Hass):
 
     def get_node_info(self, pubkey_prefix, all_states):
         """Get node coordinates and info from contact sensors"""
+        matches = []
+        
         for entity_id, state_data in all_states.items():
             if not (entity_id.startswith("binary_sensor.meshcore_") and "_contact" in entity_id):
                 continue
@@ -147,14 +149,28 @@ class MeshCoreDirectLinksExport(hass.Hass):
                 node_type = attrs.get("node_type_str", "Unknown")
                 
                 if lat and lon:
-                    return {
+                    matches.append({
                         "name": name,
                         "lat": float(lat),
                         "lon": float(lon),
                         "pubkey": pubkey,
                         "node_type": node_type.lower()
-                    }
-        return None
+                    })
+        
+        if not matches:
+            return None
+        
+        # If only one match, return it
+        if len(matches) == 1:
+            return matches[0]
+        
+        # Multiple matches - prefer repeaters over clients/room servers
+        for m in matches:
+            if "repeater" in m["node_type"]:
+                return m
+        
+        # No repeater found, return first match
+        return matches[0]
 
     def export_directlinks_data(self, *args, **kwargs):
         """Export direct links data to JSON file"""
