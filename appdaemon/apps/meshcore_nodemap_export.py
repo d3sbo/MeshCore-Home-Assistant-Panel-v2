@@ -18,7 +18,7 @@ class MeshCoreNodeMapExport(hass.Hass):
         self.run_every(self.export_nodemap_data, "now+60", 300)
         
         # Export when threshold changes
-        self.listen_state(self.export_nodemap_data, "input_number.meshcore_threshold_hours")
+        self.listen_state(self.export_nodemap_data, "input_number.meshcore_advert_threshold_hours")
         
         # Export when map entities sensor updates
         self.listen_state(self.export_nodemap_data, "sensor.meshcore_map_entities")
@@ -26,7 +26,7 @@ class MeshCoreNodeMapExport(hass.Hass):
     def get_threshold_seconds(self):
         """Get current threshold in seconds from input_number"""
         try:
-            threshold_hours = float(self.get_state("input_number.meshcore_threshold_hours"))
+            threshold_hours = float(self.get_state("input_number.meshcore_advert_threshold_hours"))
         except Exception:
             threshold_hours = 12.0
         return threshold_hours * 3600
@@ -82,7 +82,7 @@ class MeshCoreNodeMapExport(hass.Hass):
             
             # Get threshold for display
             try:
-                threshold_hours = float(self.get_state("input_number.meshcore_threshold_hours"))
+                threshold_hours = float(self.get_state("input_number.meshcore_advert_threshold_hours"))
             except:
                 threshold_hours = 12.0
             
