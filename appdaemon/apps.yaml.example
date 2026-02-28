@@ -16,6 +16,7 @@ meshcore_cleanup:
 meshcore_greeter:
   module: meshcore_greeter
   class: MeshCoreGreeter
+  my_name: "your repeater"
 
 meshcore_heatmap_export:
   module: meshcore_heatmap_export
