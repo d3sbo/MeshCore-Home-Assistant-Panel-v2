@@ -29,7 +29,7 @@ class MeshCoreGreeter(hass.Hass):
         self.greet_channel = 0
         
         # Your name for the greeting
-        self.my_name = "MyRepeater"
+        self.my_name = self.args.get("my_name", "MyRepeater")
         
         # Listen for new contact sensors being created
         self.listen_state(self.handle_contact_change, "binary_sensor")
@@ -37,7 +37,16 @@ class MeshCoreGreeter(hass.Hass):
         # Also listen for meshcore events for first advertisement
         self.listen_event(self.handle_new_contact_event, "meshcore_raw_event")
         
+        # Listen for test greeting event
+        self.listen_event(self.handle_test_event, "meshcore_greeter_test")
+        
         self.log(f"Loaded {len(self.greeted_pubkeys)} previously greeted contacts")
+        self.log(f"Greeter name: {self.my_name}")
+    
+    def handle_test_event(self, event_name, data, kwargs):
+        """Handle test greeting event"""
+        self.log("Test greeting event received")
+        self.test_greeting()
     
     def load_greeted(self):
         """Load list of already greeted pubkeys"""
@@ -205,8 +214,8 @@ class MeshCoreGreeter(hass.Hass):
             # Send via MeshCore service
             self.call_service(
                 "meshcore/send_channel_message",
-                channel=self.greet_channel,
-                text=message
+                channel_idx=self.greet_channel,
+                message=message
             )
             
             self.log(f"Greeted {name} ({pubkey}) - {hops} hops - on channel {self.greet_channel}")
@@ -223,3 +232,26 @@ class MeshCoreGreeter(hass.Hass):
             # Remove from greeted if send failed
             self.greeted_pubkeys.discard(pubkey)
             self.save_greeted()
+
+    def test_greeting(self, kwargs=None):
+        """Send a test greeting to verify the greeter is working"""
+        try:
+            test_message = f"Test greeting from {self.my_name}! 👋 This is a test."
+            
+            self.call_service(
+                "meshcore/send_channel_message",
+                channel_idx=self.greet_channel,
+                message=test_message
+            )
+            
+            self.log(f"Test greeting sent on channel {self.greet_channel}")
+            
+            # Send HA notification
+            self.call_service(
+                "notify/persistent_notification",
+                title="🧪 Test Greeting Sent",
+                message=f"Test message sent on channel {self.greet_channel}:\n\n{test_message}"
+            )
+            
+        except Exception as e:
+            self.log(f"Error sending test greeting: {e}", level="ERROR")
