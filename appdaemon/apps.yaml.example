@@ -17,6 +17,7 @@ meshcore_greeter:
   module: meshcore_greeter
   class: MeshCoreGreeter
   my_name: "your repeater"
+  hops_distant: 5
 
 meshcore_heatmap_export:
   module: meshcore_heatmap_export
