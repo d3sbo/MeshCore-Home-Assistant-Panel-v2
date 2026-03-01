@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeshCore Hop Frequency Heatmap</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+    }
+    #map { width: 100%; height: 100vh; }
+    .info-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 15px;
+      border-radius: 8px;
+      z-index: 1000;
+      max-width: 280px;
+      max-height: 400px;
+      overflow-y: auto;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    .info-panel h3 {
+      margin-bottom: 10px;
+      color: #60a5fa;
+      font-size: 14px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+      cursor: pointer;
+    }
+    .node-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #2a2a4a;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .node-item:hover { background: rgba(96, 165, 250, 0.2); }
+    .node-item.active { background: rgba(96, 165, 250, 0.3); }
+    .node-item:last-child { border-bottom: none; }
+    .node-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .node-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .node-count { color: #888; font-weight: bold; }
+    .legend {
+      position: absolute;
+      bottom: 80px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 11px;
+    }
+    .legend-title { margin-bottom: 8px; font-weight: bold; color: #60a5fa; }
+    .legend-item { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+    .legend-dot { width: 14px; height: 14px; border-radius: 50%; }
+    .stats {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 12px;
+    }
+    .stats h3 { color: #60a5fa; margin-bottom: 8px; font-size: 14px; }
+    .stat-row { margin: 4px 0; color: #aaa; }
+    .stat-value { color: #fff; font-weight: bold; }
+    .playback-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px 20px;
+      border-radius: 8px;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    .playback-btn {
+      background: #60a5fa;
+      border: none;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .playback-btn:hover { background: #3b82f6; }
+    .playback-btn:disabled { background: #444; cursor: not-allowed; }
+    .playback-btn.live { background: #ef4444; }
+    .playback-slider { width: 200px; cursor: pointer; }
+    .playback-time { color: #fff; font-size: 12px; min-width: 110px; text-align: center; }
+    .playback-time.live { color: #ef4444; font-weight: bold; }
+    .playback-info { color: #888; font-size: 11px; }
+    .snapshot-count { color: #60a5fa; font-weight: bold; }
+    .threshold-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-left: 1px solid #444;
+      padding-left: 12px;
+      margin-left: 5px;
+    }
+    .threshold-control label { font-size: 10px; color: #888; }
+    .threshold-slider { width: 70px; cursor: pointer; }
+    .threshold-value { font-size: 11px; color: #60a5fa; min-width: 32px; }
+    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.2); }
+    .leaflet-control-attribution { background: rgba(30, 30, 50, 0.8) !important; color: #666 !important; }
+    .leaflet-control-attribution a { color: #888 !important; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  
+  <div class="stats">
+    <h3>📡 Hop Frequency Heatmap</h3>
+    <div class="stat-row">Time Window: <span class="stat-value" id="threshold-hours">--</span>h</div>
+    <div class="stat-row">Nodes: <span class="stat-value" id="node-count">0</span></div>
+    <div class="stat-row">Paths: <span class="stat-value" id="path-count">0</span></div>
+    <div class="stat-row">Total Traffic: <span class="stat-value" id="total-traffic">0</span></div>
+    <div class="stat-row">Max Uses: <span class="stat-value" id="max-uses">0</span></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-title">Traffic Intensity</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #0000ff;"></div><span>Low</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #00ffff;"></div><span>Light</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #00ff00;"></div><span>Medium</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #ffff00;"></div><span>High</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #ff0000;"></div><span>Very High</span></div>
+  </div>
+
+  <div class="info-panel">
+    <h3 id="toggle-paths">🔥 Top Hop Nodes <span id="paths-status">(visible)</span></h3>
+    <div id="node-list"></div>
+  </div>
+
+  <div class="playback-panel">
+    <button class="playback-btn" id="btn-play" title="Play history">▶️</button>
+    <button class="playback-btn live" id="btn-live" title="Go live">🔴 LIVE</button>
+    <input type="range" class="playback-slider" id="timeline" min="0" max="0" value="0">
+    <div class="playback-time live" id="playback-time">● LIVE</div>
+    <div class="playback-info"><span class="snapshot-count" id="snapshot-count">0</span> snaps</div>
+    <div class="threshold-control">
+      <label>Filter:</label>
+      <input type="range" class="threshold-slider" id="playback-threshold" min="1" max="48" value="48">
+      <span class="threshold-value" id="playback-threshold-value">ALL</span>
+    </div>
+  </div>
+
+  <script>
+    const map = L.map('map', { center: [52.5, -1], zoom: 7, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+    let hopData = [], pathData = [], heatLayer = null, markers = [], pathLines = [];
+    let selectedNode = null, markersVisible = true;
+
+    // Playback state - loaded from server
+    let snapshots = [], isPlaying = false, playbackIndex = 0, playbackInterval = null, liveMode = true;
+    const PLAYBACK_SPEED = 400;
+
+    function loadSnapshots() {
+      fetch('/local/meshcore_heatmap_history.json?t=' + Date.now())
+        .then(r => r.json())
+        .then(data => {
+          if (data.snapshots && Array.isArray(data.snapshots)) {
+            snapshots = data.snapshots;
+            updateSnapshotCount();
+          }
+        })
+        .catch(e => {});
+    }
+
+    function updateSnapshotCount() {
+      document.getElementById('snapshot-count').textContent = snapshots.length;
+      document.getElementById('timeline').max = Math.max(0, snapshots.length - 1);
+      if (liveMode && snapshots.length > 0) {
+        document.getElementById('timeline').value = snapshots.length - 1;
+      }
+    }
+
+    function formatTime(ts) {
+      const d = new Date(ts * 1000);
+      return d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    document.getElementById('btn-play').addEventListener('click', function() {
+      if (snapshots.length === 0) return;
+      if (isPlaying) {
+        isPlaying = false;
+        clearInterval(playbackInterval);
+        this.textContent = '▶️';
+      } else {
+        isPlaying = true;
+        liveMode = false;
+        this.textContent = '⏸️';
+        document.getElementById('btn-live').classList.remove('live');
+        document.getElementById('playback-time').classList.remove('live');
+        if (playbackIndex >= snapshots.length - 1) playbackIndex = 0;
+        playbackInterval = setInterval(() => {
+          playbackIndex++;
+          if (playbackIndex >= snapshots.length) {
+            isPlaying = false;
+            clearInterval(playbackInterval);
+            document.getElementById('btn-play').textContent = '▶️';
+            playbackIndex = snapshots.length - 1;
+          }
+          document.getElementById('timeline').value = playbackIndex;
+          displaySnapshot(playbackIndex);
+        }, PLAYBACK_SPEED);
+      }
+    });
+
+    document.getElementById('btn-live').addEventListener('click', goLive);
+
+    function goLive() {
+      isPlaying = false;
+      liveMode = true;
+      clearInterval(playbackInterval);
+      document.getElementById('btn-play').textContent = '▶️';
+      document.getElementById('btn-live').classList.add('live');
+      document.getElementById('playback-time').textContent = '● LIVE';
+      document.getElementById('playback-time').classList.add('live');
+      if (snapshots.length > 0) document.getElementById('timeline').value = snapshots.length - 1;
+      fetchLiveData();
+    }
+
+    document.getElementById('timeline').addEventListener('input', function() {
+      if (snapshots.length === 0) return;
+      liveMode = false;
+      isPlaying = false;
+      clearInterval(playbackInterval);
+      document.getElementById('btn-play').textContent = '▶️';
+      document.getElementById('btn-live').classList.remove('live');
+      document.getElementById('playback-time').classList.remove('live');
+      playbackIndex = parseInt(this.value);
+      displaySnapshot(playbackIndex);
+    });
+
+    // Get threshold from Home Assistant (read from live data file)
+    let currentThresholdHours = 4; // Default for live mode
+    let playbackThresholdHours = 48; // Default for playback (48 = show all)
+    
+    function loadThreshold() {
+      fetch('/local/meshcore_heatmap_data.json?t=' + Date.now())
+        .then(r => r.json())
+        .then(data => {
+          if (data.threshold_hours) {
+            currentThresholdHours = data.threshold_hours;
+            if (liveMode) {
+              document.getElementById('threshold-hours').textContent = currentThresholdHours;
+            }
+          }
+        }).catch(e => {});
+    }
+
+    // Playback threshold slider
+    document.getElementById('playback-threshold').addEventListener('input', function() {
+      playbackThresholdHours = parseInt(this.value);
+      const display = playbackThresholdHours >= 48 ? 'ALL' : playbackThresholdHours + 'h';
+      document.getElementById('playback-threshold-value').textContent = display;
+      if (!liveMode && snapshots.length > 0) {
+        displaySnapshot(playbackIndex);
+      }
+    });
+
+    function filterNodesByThreshold(nodes, snapshotTimestamp) {
+      if (!nodes || nodes.length === 0) return [];
+      
+      // If threshold is 48+ (ALL), return all nodes
+      if (playbackThresholdHours >= 48) {
+        return nodes;
+      }
+      
+      // If nodes don't have last_used timestamps, return all (old format data)
+      const hasTimestamps = nodes.some(n => n.last_used !== undefined && n.last_used > 0);
+      if (!hasTimestamps) {
+        return nodes;
+      }
+      
+      const thresholdSeconds = playbackThresholdHours * 3600;
+      const cutoff = snapshotTimestamp - thresholdSeconds;
+      return nodes.filter(n => (n.last_used || 0) >= cutoff);
+    }
+
+    function displaySnapshot(index) {
+      if (index < 0 || index >= snapshots.length) return;
+      const snapshot = snapshots[index];
+      const snapshotTime = snapshot.timestamp;
+      
+      // Filter nodes by playback threshold setting
+      hopData = filterNodesByThreshold(snapshot.nodes || [], snapshotTime);
+      pathData = snapshot.paths || [];
+      
+      document.getElementById('playback-time').textContent = formatTime(snapshotTime);
+      const thresholdDisplay = playbackThresholdHours >= 48 ? 'ALL' : playbackThresholdHours;
+      document.getElementById('threshold-hours').textContent = thresholdDisplay;
+      updateMap(false);
+    }
+
+    function getColor(ratio) {
+      if (ratio < 0.2) return '#0000ff';
+      if (ratio < 0.4) return '#00ffff';
+      if (ratio < 0.6) return '#00ff00';
+      if (ratio < 0.8) return '#ffff00';
+      return '#ff0000';
+    }
+
+    function toggleMarkers() {
+      markersVisible = !markersVisible;
+      markers.forEach(m => m.setStyle({ fillOpacity: markersVisible ? 0.9 : 0, opacity: markersVisible ? 1 : 0 }));
+      document.getElementById('paths-status').textContent = markersVisible ? '(visible)' : '(hidden)';
+    }
+    document.getElementById('toggle-paths').addEventListener('click', toggleMarkers);
+
+    function highlightNodePaths(nodeName) {
+      selectedNode = selectedNode === nodeName ? null : nodeName;
+      document.querySelectorAll('.node-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.nodeName === selectedNode);
+      });
+      pathLines.forEach(line => {
+        if (selectedNode === null) line.setStyle({ opacity: 0 });
+        else if (line.pathNodes && line.pathNodes.includes(selectedNode)) { 
+          line.setStyle({ opacity: 0.8, dashArray: '8, 8', weight: 3 }); 
+          line.bringToFront(); 
+        }
+        else line.setStyle({ opacity: 0 });
+      });
+    }
+
+    function updateMap(fitBounds = false) {
+      if (heatLayer) map.removeLayer(heatLayer);
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+      pathLines.forEach(l => map.removeLayer(l));
+      pathLines = [];
+      if (hopData.length === 0) return;
+
+      const maxUses = Math.max(...hopData.map(d => d.use_count), 1);
+      const totalTraffic = hopData.reduce((sum, d) => sum + d.use_count, 0);
+      document.getElementById('node-count').textContent = hopData.length;
+      document.getElementById('path-count').textContent = pathData.length;
+      document.getElementById('total-traffic').textContent = totalTraffic;
+      document.getElementById('max-uses').textContent = maxUses;
+
+      // Draw paths
+      if (pathData && pathData.length > 0) {
+        const maxHops = Math.max(...pathData.map(p => p.hops || 1), 1);
+        pathData.forEach(path => {
+          const coords = path.coords || path.coordinates;
+          if (!coords || coords.length < 2) return;
+          const latlngs = coords.map(c => [c.lat, c.lon]);
+          const ratio = 1 - ((path.hops - 2) / Math.max(maxHops - 2, 1));
+          const color = getColor(Math.max(0, Math.min(1, ratio)));
+          const polyline = L.polyline(latlngs, { color: color, weight: 3, opacity: 0, dashArray: '8, 8' }).addTo(map);
+          polyline.pathNodes = coords.map(c => c.name);
+          polyline.sender = path.sender;
+          polyline.bindPopup(`<div style="text-align:center;"><strong>${path.sender}</strong><br><span style="color:${color};font-size:18px;font-weight:bold;">${path.hops}</span> hops</div>`);
+          pathLines.push(polyline);
+        });
+      }
+
+      const heatData = hopData.map(node => [node.lat, node.lon, node.use_count / maxUses]);
+      heatLayer = L.heatLayer(heatData, { radius: 50, blur: 35, maxZoom: 10, max: 1.0, minOpacity: 0.3,
+        gradient: { 0.0: '#0000ff', 0.25: '#00ffff', 0.5: '#00ff00', 0.75: '#ffff00', 1.0: '#ff0000' }
+      }).addTo(map);
+
+      hopData.forEach(node => {
+        const ratio = node.use_count / maxUses;
+        const marker = L.circleMarker([node.lat, node.lon], { radius: 4, fillColor: getColor(ratio), color: '#000', weight: 1, opacity: markersVisible ? 1 : 0, fillOpacity: markersVisible ? 0.9 : 0 }).addTo(map);
+        marker.bindPopup(`<div style="text-align:center;"><strong>${node.name}</strong><br><span style="color:${getColor(ratio)};font-size:18px;font-weight:bold;">${node.use_count}</span> uses</div>`);
+        markers.push(marker);
+      });
+
+      const nodeList = document.getElementById('node-list');
+      const sortedNodes = [...hopData].sort((a, b) => b.use_count - a.use_count);
+      nodeList.innerHTML = sortedNodes.map(node => {
+        const color = getColor(node.use_count / maxUses);
+        return `<div class="node-item" data-node-name="${node.name}" onclick="highlightNodePaths('${node.name.replace(/'/g, "\\'")}')"><div class="node-dot" style="background:${color};"></div><span class="node-name" title="${node.name}">${node.name}</span><span class="node-count">${node.use_count}</span></div>`;
+      }).join('');
+
+      if (fitBounds && hopData.length > 1) map.fitBounds(L.latLngBounds(hopData.map(d => [d.lat, d.lon])), { padding: [50, 50] });
+    }
+
+    function fetchLiveData() {
+      fetch('/local/meshcore_heatmap_data.json?t=' + Date.now())
+        .then(r => r.json())
+        .then(data => {
+          if (data.nodes && Array.isArray(data.nodes)) {
+            if (data.threshold_hours) document.getElementById('threshold-hours').textContent = data.threshold_hours;
+            if (liveMode) {
+              hopData = data.nodes;
+              pathData = data.paths || [];
+              updateMap(markers.length === 0);
+            }
+          }
+        }).catch(e => {});
+    }
+
+    // Load snapshots from server
+    loadSnapshots();
+    loadThreshold();
+    setInterval(loadSnapshots, 30000);  // Check every 30 seconds
+    setInterval(loadThreshold, 60000);  // Update threshold every minute
+
+    // Initial live data
+    fetch('/local/meshcore_heatmap_data.json')
+      .then(r => r.json())
+      .then(data => {
+        if (data.nodes && Array.isArray(data.nodes)) {
+          hopData = data.nodes;
+          pathData = data.paths || [];
+          if (data.threshold_hours) document.getElementById('threshold-hours').textContent = data.threshold_hours;
+          updateMap(true);
+        }
+      }).catch(e => {});
+
+    setInterval(fetchLiveData, 10000);
+  </script>
+</body>
+</html>

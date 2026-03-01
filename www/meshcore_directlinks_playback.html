@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeshCore Direct Links</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+    }
+    #map { width: 100%; height: 100vh; }
+    .stats {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 12px;
+    }
+    .stats h3 { color: #a855f7; margin-bottom: 8px; font-size: 14px; }
+    .stat-row { margin: 4px 0; color: #aaa; }
+    .stat-value { color: #fff; font-weight: bold; }
+    .legend {
+      position: absolute;
+      bottom: 80px;
+      left: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      z-index: 1000;
+      font-size: 11px;
+    }
+    .legend-title { margin-bottom: 8px; font-weight: bold; color: #a855f7; }
+    .legend-item { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .info-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(30, 30, 50, 0.95);
+      padding: 15px;
+      border-radius: 8px;
+      z-index: 1000;
+      max-width: 250px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .info-panel h3 {
+      margin-bottom: 10px;
+      color: #a855f7;
+      font-size: 14px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+    }
+    .node-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid #2a2a4a;
+      font-size: 11px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .node-item:hover { background: rgba(168, 85, 247, 0.2); }
+    .node-item.active { background: rgba(168, 85, 247, 0.3); }
+    .node-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .node-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .node-count { color: #888; font-weight: bold; }
+    #node-search {
+      width: 100%;
+      padding: 6px;
+      margin-bottom: 10px;
+      background: #2a2a4a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 12px;
+    }
+    .playback-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30, 30, 50, 0.95);
+      padding: 12px 20px;
+      border-radius: 8px;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    .playback-btn {
+      background: #a855f7;
+      border: none;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .playback-btn:hover { background: #9333ea; }
+    .playback-btn:disabled { background: #444; cursor: not-allowed; }
+    .playback-btn.live { background: #ef4444; }
+    .playback-slider { width: 200px; cursor: pointer; }
+    .playback-time { color: #fff; font-size: 12px; min-width: 110px; text-align: center; }
+    .playback-time.live { color: #ef4444; font-weight: bold; }
+    .playback-info { color: #888; font-size: 11px; }
+    .snapshot-count { color: #a855f7; font-weight: bold; }
+    .threshold-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-left: 1px solid #444;
+      padding-left: 12px;
+      margin-left: 5px;
+    }
+    .threshold-control label { font-size: 10px; color: #888; }
+    .threshold-slider { width: 70px; cursor: pointer; }
+    .threshold-value { font-size: 11px; color: #a855f7; min-width: 32px; }
+    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.2); }
+    .leaflet-control-attribution { background: rgba(30, 30, 50, 0.8) !important; color: #666 !important; }
+    .leaflet-control-attribution a { color: #888 !important; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  
+  <div class="stats">
+    <h3>🔗 Direct Links Heatmap</h3>
+    <div class="stat-row">Time Window: <span class="stat-value" id="threshold-hours">--</span>h</div>
+    <div class="stat-row">Nodes: <span class="stat-value" id="node-count">0</span></div>
+    <div class="stat-row">Direct Links: <span class="stat-value" id="link-count">0</span></div>
+    <div class="stat-row">Max Links: <span class="stat-value" id="max-links">0</span></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-title">Link Density</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #0000ff;"></div><span>1-2 links</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #00ffff;"></div><span>3-5 links</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #00ff00;"></div><span>6-10 links</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #ffff00;"></div><span>11-20 links</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #ff0000;"></div><span>20+ links</span></div>
+  </div>
+
+  <div class="info-panel">
+    <h3>🔗 Top Connected Nodes</h3>
+    <input type="text" id="node-search" placeholder="Search nodes..." oninput="filterNodes()">
+    <div id="node-list"></div>
+  </div>
+
+  <div class="playback-panel">
+    <button class="playback-btn" id="btn-play" title="Play history">▶️</button>
+    <button class="playback-btn live" id="btn-live" title="Go live">🔴 LIVE</button>
+    <input type="range" class="playback-slider" id="timeline" min="0" max="0" value="0">
+    <div class="playback-time live" id="playback-time">● LIVE</div>
+    <div class="playback-info"><span class="snapshot-count" id="snapshot-count">0</span> snaps</div>
+    <div class="threshold-control">
+      <label>Filter:</label>
+      <input type="range" class="threshold-slider" id="playback-threshold" min="1" max="48" value="48">
+      <span class="threshold-value" id="playback-threshold-value">ALL</span>
+    </div>
+  </div>
+
+  <script>
+    const map = L.map('map', { center: [52.3, 0], zoom: 9, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+    let nodeData = [], linkData = [], heatLayer = null, markers = [], linkLines = [];
+    let selectedNode = null;
+    let allSnapshotLinks = []; // Store all links for highlighting regardless of threshold
+
+    // Playback state - loaded from server
+    let snapshots = [], isPlaying = false, playbackIndex = 0, playbackInterval = null, liveMode = true;
+    const PLAYBACK_SPEED = 400;
+
+    function loadSnapshots() {
+      fetch('/local/meshcore_directlinks_history.json?t=' + Date.now())
+        .then(r => r.json())
+        .then(data => {
+          if (data.snapshots && Array.isArray(data.snapshots)) {
+            snapshots = data.snapshots;
+            updateSnapshotCount();
+          }
+        })
+        .catch(e => {});
+    }
+
+    function updateSnapshotCount() {
+      document.getElementById('snapshot-count').textContent = snapshots.length;
+      document.getElementById('timeline').max = Math.max(0, snapshots.length - 1);
+      if (liveMode && snapshots.length > 0) {
+        document.getElementById('timeline').value = snapshots.length - 1;
+      }
+    }
+
+    function formatTime(ts) {
+      const d = new Date(ts * 1000);
+      return d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    document.getElementById('btn-play').addEventListener('click', function() {
+      if (snapshots.length === 0) return;
+      if (isPlaying) {
+        isPlaying = false;
+        clearInterval(playbackInterval);
+        this.textContent = '▶️';
+      } else {
+        isPlaying = true;
+        liveMode = false;
+        this.textContent = '⏸️';
+        document.getElementById('btn-live').classList.remove('live');
+        document.getElementById('playback-time').classList.remove('live');
+        if (playbackIndex >= snapshots.length - 1) playbackIndex = 0;
+        playbackInterval = setInterval(() => {
+          playbackIndex++;
+          if (playbackIndex >= snapshots.length) {
+            isPlaying = false;
+            clearInterval(playbackInterval);
+            document.getElementById('btn-play').textContent = '▶️';
+            playbackIndex = snapshots.length - 1;
+          }
+          document.getElementById('timeline').value = playbackIndex;
+          displaySnapshot(playbackIndex);
+        }, PLAYBACK_SPEED);
+      }
+    });
+
+    document.getElementById('btn-live').addEventListener('click', goLive);
+
+    function goLive() {
+      isPlaying = false;
+      liveMode = true;
+      allSnapshotLinks = []; // Clear snapshot links when going live
+      clearInterval(playbackInterval);
+      document.getElementById('btn-play').textContent = '▶️';
+      document.getElementById('btn-live').classList.add('live');
+      document.getElementById('playback-time').textContent = '● LIVE';
+      document.getElementById('playback-time').classList.add('live');
+      if (snapshots.length > 0) document.getElementById('timeline').value = snapshots.length - 1;
+      fetchLiveData();
+    }
+
+    document.getElementById('timeline').addEventListener('input', function() {
+      if (snapshots.length === 0) return;
+      liveMode = false;
+      isPlaying = false;
+      clearInterval(playbackInterval);
+      document.getElementById('btn-play').textContent = '▶️';
+      document.getElementById('btn-live').classList.remove('live');
+      document.getElementById('playback-time').classList.remove('live');
+      playbackIndex = parseInt(this.value);
+      displaySnapshot(playbackIndex);
+    });
+
+    // Get threshold from Home Assistant (read from live data file)
+    let currentThresholdHours = 4; // Default for live mode
+    let playbackThresholdHours = 48; // Default for playback (48 = show all)
+    
+    function loadThreshold() {
+      fetch('/local/meshcore_directlinks_data.json?t=' + Date.now())
+        .then(r => r.json())
+        .then(data => {
+          if (data.threshold_hours) {
+            currentThresholdHours = data.threshold_hours;
+            if (liveMode) {
+              document.getElementById('threshold-hours').textContent = currentThresholdHours;
+            }
+          }
+        }).catch(e => {});
+    }
+
+    // Playback threshold slider
+    document.getElementById('playback-threshold').addEventListener('input', function() {
+      playbackThresholdHours = parseInt(this.value);
+      const display = playbackThresholdHours >= 48 ? 'ALL' : playbackThresholdHours + 'h';
+      document.getElementById('playback-threshold-value').textContent = display;
+      if (!liveMode && snapshots.length > 0) {
+        displaySnapshot(playbackIndex);
+      }
+    });
+
+    function filterNodesByThreshold(nodes, links, snapshotTimestamp) {
+      if (!nodes || nodes.length === 0) return { nodes: [], links: [] };
+      
+      // If threshold is 48+ (ALL), return all data
+      if (playbackThresholdHours >= 48) {
+        return { nodes: nodes, links: links || [] };
+      }
+      
+      // If nodes don't have last_seen timestamps, return all (old format data)
+      const hasTimestamps = nodes.some(n => n.last_seen !== undefined && n.last_seen > 0);
+      if (!hasTimestamps) {
+        return { nodes: nodes, links: links || [] };
+      }
+      
+      const thresholdSeconds = playbackThresholdHours * 3600;
+      const cutoff = snapshotTimestamp - thresholdSeconds;
+      
+      const filteredNodes = nodes.filter(n => (n.last_seen || 0) >= cutoff);
+      const filteredNodeNames = new Set(filteredNodes.map(n => n.name));
+      
+      // Filter links to only include those between active nodes
+      const filteredLinks = (links || []).filter(l => 
+        (l.last_seen || 0) >= cutoff &&
+        filteredNodeNames.has(l.from_name) && 
+        filteredNodeNames.has(l.to_name)
+      );
+      
+      return { nodes: filteredNodes, links: filteredLinks };
+    }
+
+    function displaySnapshot(index) {
+      if (index < 0 || index >= snapshots.length) return;
+      const snapshot = snapshots[index];
+      const snapshotTime = snapshot.timestamp;
+      
+      // Store ALL links from snapshot for highlighting
+      allSnapshotLinks = snapshot.links || [];
+      
+      // Filter nodes by playback threshold setting
+      const filtered = filterNodesByThreshold(snapshot.nodes || [], snapshot.links || [], snapshotTime);
+      nodeData = filtered.nodes;
+      linkData = filtered.links;
+      
+      document.getElementById('playback-time').textContent = formatTime(snapshotTime);
+      const thresholdDisplay = playbackThresholdHours >= 48 ? 'ALL' : playbackThresholdHours;
+      document.getElementById('threshold-hours').textContent = thresholdDisplay;
+      updateMap(false);
+    }
+
+    function getColor(ratio) {
+      if (ratio < 0.2) return '#0000ff';
+      if (ratio < 0.4) return '#00ffff';
+      if (ratio < 0.6) return '#00ff00';
+      if (ratio < 0.8) return '#ffff00';
+      return '#ff0000';
+    }
+
+    function filterNodes() {
+      const searchTerm = document.getElementById('node-search').value.toLowerCase();
+      document.querySelectorAll('.node-item').forEach(item => {
+        item.style.display = item.dataset.nodeName.toLowerCase().includes(searchTerm) ? 'flex' : 'none';
+      });
+    }
+
+    function highlightNodeLinks(nodeName) {
+      selectedNode = selectedNode === nodeName ? null : nodeName;
+      document.querySelectorAll('.node-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.nodeName === selectedNode);
+      });
+      linkLines.forEach(line => {
+        if (selectedNode === null) line.setStyle({ opacity: 0 });
+        else if (line.fromName === selectedNode || line.toName === selectedNode) { line.setStyle({ opacity: 0.8, weight: 3 }); line.bringToFront(); }
+        else line.setStyle({ opacity: 0 });
+      });
+    }
+
+    function updateMap(fitBounds = false) {
+      if (heatLayer) map.removeLayer(heatLayer);
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+      linkLines.forEach(l => map.removeLayer(l));
+      linkLines = [];
+      if (nodeData.length === 0) return;
+
+      const maxLinks = Math.max(...nodeData.map(d => d.link_count), 1);
+      document.getElementById('node-count').textContent = nodeData.length;
+      document.getElementById('link-count').textContent = linkData.length;
+      document.getElementById('max-links').textContent = maxLinks;
+
+      const heatData = nodeData.map(node => [node.lat, node.lon, node.link_count / maxLinks]);
+      heatLayer = L.heatLayer(heatData, { radius: 45, blur: 30, maxZoom: 10, max: 1.0, minOpacity: 0.3,
+        gradient: { 0.0: '#0000ff', 0.25: '#00ffff', 0.5: '#00ff00', 0.75: '#ffff00', 1.0: '#ff0000' }
+      }).addTo(map);
+
+      // Draw ALL links from snapshot (not just filtered) so highlighting works
+      const linksToUse = allSnapshotLinks.length > 0 ? allSnapshotLinks : linkData;
+      if (linksToUse && linksToUse.length > 0) {
+        linksToUse.forEach(link => {
+          const polyline = L.polyline([[link.from_lat, link.from_lon], [link.to_lat, link.to_lon]], { color: '#a855f7', weight: 3, opacity: 0, dashArray: '5, 10' }).addTo(map);
+          polyline.fromName = link.from_name;
+          polyline.toName = link.to_name;
+          polyline.bindPopup(`${link.from_name} ↔ ${link.to_name}<br>Count: ${link.count}`);
+          linkLines.push(polyline);
+        });
+      }
+
+      nodeData.forEach(node => {
+        const ratio = node.link_count / maxLinks;
+        const marker = L.circleMarker([node.lat, node.lon], { radius: 4, fillColor: getColor(ratio), color: '#000', weight: 1, opacity: 1, fillOpacity: 0.9 }).addTo(map);
+        marker.bindPopup(`<div style="text-align:center;"><strong>${node.name}</strong><br><span style="color:${getColor(ratio)};font-size:18px;font-weight:bold;">${node.link_count}</span> direct links</div>`);
+        markers.push(marker);
+      });
+
+      const nodeList = document.getElementById('node-list');
+      const sortedNodes = [...nodeData].sort((a, b) => b.link_count - a.link_count);
+      nodeList.innerHTML = sortedNodes.map(node => {
+        const color = getColor(node.link_count / maxLinks);
+        return `<div class="node-item" data-node-name="${node.name}" onclick="highlightNodeLinks('${node.name.replace(/'/g, "\\'")}')"><div class="node-dot" style="background:${color};"></div><span class="node-name" title="${node.name}">${node.name}</span><span class="node-count">${node.link_count}</span></div>`;
+      }).join('');
+
+      if (fitBounds && nodeData.length > 1) map.fitBounds(L.latLngBounds(nodeData.map(d => [d.lat, d.lon])), { padding: [50, 50] });
+    }
+
+    function fetchLiveData() {
+      fetch('/local/meshcore_directlinks_data.json?t=' + Date.now())
+        .then(r => r.json())
+        .then(data => {
+          if (data.nodes && Array.isArray(data.nodes)) {
+            if (data.threshold_hours) document.getElementById('threshold-hours').textContent = data.threshold_hours;
+            if (liveMode) {
+              nodeData = data.nodes;
+              linkData = data.links || [];
+              updateMap(markers.length === 0);
+            }
+          }
+        }).catch(e => {});
+    }
+
+    // Load snapshots from server
+    loadSnapshots();
+    loadThreshold();
+    setInterval(loadSnapshots, 30000);  // Check every 30 seconds
+    setInterval(loadThreshold, 60000);  // Update threshold every minute
+
+    // Initial live data
+    fetch('/local/meshcore_directlinks_data.json')
+      .then(r => r.json())
+      .then(data => {
+        if (data.nodes && Array.isArray(data.nodes)) {
+          nodeData = data.nodes;
+          linkData = data.links || [];
+          if (data.threshold_hours) document.getElementById('threshold-hours').textContent = data.threshold_hours;
+          updateMap(true);
+        }
+      }).catch(e => {});
+
+    setInterval(fetchLiveData, 10000);
+  </script>
+</body>
+</html>
