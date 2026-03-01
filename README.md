@@ -112,6 +112,7 @@ meshcore_hops:
 meshcore_paths:
   module: meshcore_paths
   class: MeshCorePathMap
+  my_pubkey: "YOUR_PUBKEY_HERE"
 
 meshcore_cleanup:
   module: meshcore_cleanup
@@ -184,10 +185,13 @@ Create 1 dropdown helper:
 
 ### 6. Configure Your Pubkey
 
-Edit `meshcore_paths.py` line 21 to set your MeshCore device's pubkey:
+Set your MeshCore device's pubkey in `apps.yaml`:
 
-```python
-self.my_repeater_pubkey = "YOUR_PUBKEY_HERE"
+```yaml
+meshcore_paths:
+  module: meshcore_paths
+  class: MeshCorePathMap
+  my_pubkey: "79a9144ef107"
 ```
 
 **To find your pubkey:**
