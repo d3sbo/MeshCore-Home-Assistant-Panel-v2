@@ -191,7 +191,7 @@ Set your MeshCore device's pubkey in `apps.yaml`:
 meshcore_paths:
   module: meshcore_paths
   class: MeshCorePathMap
-  my_pubkey: "79a9144ef107"
+  my_pubkey: "Your pubkey"
 ```
 
 **To find your pubkey:**
