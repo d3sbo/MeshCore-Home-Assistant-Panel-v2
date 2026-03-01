@@ -52,8 +52,14 @@ class MeshCorePathMap(hass.Hass):
         self.persistence_file = "/homeassistant/www/meshcore_hops_data.json"
         
         # Your repeater's pubkey prefix - the endpoint of all paths
-        self.my_repeater_pubkey = "YOUR_PUBKEY_HERE"
+        # Configure in apps.yaml: my_pubkey: "your_pubkey_here"
+        self.my_repeater_pubkey = self.args.get("my_pubkey", "")
         self.my_coords = None
+        
+        if not self.my_repeater_pubkey:
+            self.log("WARNING: my_pubkey not set in apps.yaml - path visualization may not work correctly")
+        else:
+            self.log(f"My pubkey: {self.my_repeater_pubkey}")
         
         # Cache for pubkey prefix -> coordinates
         self.node_coordinates = {}
