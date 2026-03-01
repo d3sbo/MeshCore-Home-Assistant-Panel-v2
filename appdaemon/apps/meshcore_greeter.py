@@ -23,7 +23,7 @@ class MeshCoreGreeter(hass.Hass):
         self.load_greeted()
         
         # Max hops to greet
-        self.max_hops = 5
+        self.max_hops = self.args.get("hops_distant", 5)
         
         # Channel to greet on (0 = Public)
         self.greet_channel = 0
@@ -41,7 +41,7 @@ class MeshCoreGreeter(hass.Hass):
         self.listen_event(self.handle_test_event, "meshcore_greeter_test")
         
         self.log(f"Loaded {len(self.greeted_pubkeys)} previously greeted contacts")
-        self.log(f"Greeter name: {self.my_name}")
+        self.log(f"Greeter name: {self.my_name}, max hops: {self.max_hops}")
     
     def handle_test_event(self, event_name, data, kwargs):
         """Handle test greeting event"""
