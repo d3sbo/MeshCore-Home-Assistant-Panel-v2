@@ -481,14 +481,18 @@ class MeshCoreHops(hass.Hass):
             del self.rx_log_cache[k]
 
     def sanitize_entity_name(self, name):
-        """Convert a name to a valid entity_id component"""
-        # Remove emojis and special characters, replace spaces with underscores
-        # Keep only alphanumeric and underscores
-        sanitized = re.sub(r'[^\w\s]', '', name, flags=re.UNICODE)
+        """Convert a name to a valid entity_id component - ASCII only"""
+        import unicodedata
+        # First normalize accented chars to ASCII equivalents (é -> e)
+        normalized = unicodedata.normalize('NFKD', name)
+        # Keep only ASCII alphanumeric and spaces
+        sanitized = ''.join(c if (c.isalnum() and ord(c) < 128) or c == ' ' else '' for c in normalized)
         sanitized = re.sub(r'\s+', '_', sanitized.strip())
         sanitized = sanitized.lower()
         # Remove any leading/trailing underscores
         sanitized = sanitized.strip('_')
+        # Remove consecutive underscores
+        sanitized = re.sub(r'_+', '_', sanitized)
         # Ensure it's not empty
         if not sanitized:
             sanitized = "unknown"
