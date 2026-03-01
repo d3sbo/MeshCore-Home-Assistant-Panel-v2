@@ -8,6 +8,7 @@ meshcore_hops:
 meshcore_paths:
   module: meshcore_paths
   class: MeshCorePathMap
+  my_pubkey: "first 12 characters"
 
 meshcore_cleanup:
   module: meshcore_cleanup
