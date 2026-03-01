@@ -2,6 +2,7 @@ import appdaemon.plugins.hass.hassapi as hass
 import time
 import json
 import os
+import re
 from datetime import datetime
 
 class MeshCorePathMap(hass.Hass):
@@ -10,6 +11,39 @@ class MeshCorePathMap(hass.Hass):
     The HA map card will show lines using the history feature.
     Also creates markers for each hop node used in paths.
     """
+
+    def sanitize_for_entity_id(self, name):
+        """Sanitize name for use in entity_id only - removes special chars"""
+        if not name:
+            return "unknown"
+        # Keep only ASCII letters, numbers, spaces
+        import re
+        sanitized = "".join(c if c.isalnum() or c == " " else "" for c in name.lower())
+        sanitized = re.sub(r'\s+', '_', sanitized.strip())
+        sanitized = re.sub(r'_+', '_', sanitized)
+        sanitized = sanitized.strip('_')
+        return sanitized if sanitized else "unknown"
+
+    def normalize_display_name(self, name):
+        """Normalize name for display - remove problematic characters"""
+        if not name:
+            return "Unknown"
+        import unicodedata
+        # Normalize accented characters to ASCII equivalents
+        normalized = unicodedata.normalize('NFKD', name)
+        # Keep only ASCII characters and common emojis (skip for now)
+        result = []
+        for c in normalized:
+            code = ord(c)
+            if code < 128:
+                # ASCII - keep
+                result.append(c)
+            # Skip all non-ASCII for now to debug the issue
+        display = ''.join(result).strip()
+        # Clean up multiple spaces
+        while '  ' in display:
+            display = display.replace('  ', ' ')
+        return display.strip() if display.strip() else "Unknown"
 
     def initialize(self):
         self.log("MeshCorePathMap initialized")
@@ -84,59 +118,92 @@ class MeshCorePathMap(hass.Hass):
     def restore_hop_markers(self, kwargs=None):
         """Restore device_tracker entities from persisted hop data"""
         try:
+            import re
+            import unicodedata
+            
             if not self.hop_nodes_used:
                 self.log("No hop nodes to restore")
                 return
             
             self.log(f"Restoring {len(self.hop_nodes_used)} hop node markers...")
             
+            # First pass: group nodes by sanitized name
+            nodes_by_name = {}
             for pubkey, data in self.hop_nodes_used.items():
                 coords = data.get("coords", {})
                 if not coords or not coords.get("lat") or not coords.get("lon"):
                     continue
                 
                 name = coords.get("name", "Unknown")
-                node_type = coords.get("node_type", "Unknown")
                 
-                # Sanitize name for entity ID
-                import re
-                safe_name = "".join(c if c.isalnum() or c == " " else "" for c in name.lower())
+                # Sanitize name for entity ID - ASCII only
+                normalized = unicodedata.normalize('NFKD', name.lower())
+                safe_name = "".join(c if (c.isalnum() and ord(c) < 128) or c == " " else "" for c in normalized)
                 safe_name = re.sub(r'\s+', '_', safe_name.strip())
                 safe_name = re.sub(r'_+', '_', safe_name)
                 safe_name = safe_name.strip('_')
                 if not safe_name:
-                    safe_name = pubkey[:8]
+                    safe_name = "unknown"
                 
-                entity_id = f"device_tracker.meshcore_hop_{safe_name}"
+                if safe_name not in nodes_by_name:
+                    nodes_by_name[safe_name] = []
+                nodes_by_name[safe_name].append((pubkey, data, coords))
+            
+            # Second pass: create entities, adding pubkey suffix only if needed
+            for safe_name, nodes in nodes_by_name.items():
+                # Check if nodes with same name are at different locations (>100m apart)
+                needs_disambiguation = False
+                if len(nodes) > 1:
+                    first_lat = nodes[0][2].get("lat", 0)
+                    first_lon = nodes[0][2].get("lon", 0)
+                    for _, _, coords in nodes[1:]:
+                        lat = coords.get("lat", 0)
+                        lon = coords.get("lon", 0)
+                        if abs(lat - first_lat) > 0.001 or abs(lon - first_lon) > 0.001:
+                            needs_disambiguation = True
+                            break
                 
-                # Set icon based on node type
-                if "repeater" in node_type.lower():
-                    icon = "mdi:radio-tower"
-                elif "client" in node_type.lower():
-                    icon = "mdi:cellphone-wireless"
-                elif "room" in node_type.lower():
-                    icon = "mdi:forum"
-                else:
-                    icon = "mdi:access-point"
-                
-                self.set_state(
-                    entity_id,
-                    state="home",
-                    attributes={
-                        "friendly_name": f"Hop: {name}",
-                        "source_type": "gps",
-                        "latitude": coords["lat"],
-                        "longitude": coords["lon"],
-                        "gps_accuracy": 50,
-                        "source": "meshcore_hop",
-                        "node_name": name,
-                        "node_type": node_type,
-                        "pubkey": pubkey,
-                        "use_count": data.get("use_count", 0),
-                        "last_used": data.get("last_used", 0),
-                        "icon": icon
-                    }
-                )
+                for pubkey, data, coords in nodes:
+                    name = coords.get("name", "Unknown")
+                    node_type = coords.get("node_type", "Unknown")
+                    
+                    # Add pubkey suffix only if disambiguation needed
+                    if needs_disambiguation:
+                        entity_id = f"device_tracker.meshcore_hop_{safe_name}_{pubkey[:6]}"
+                    else:
+                        entity_id = f"device_tracker.meshcore_hop_{safe_name}"
+                    
+                    # Set icon based on node type
+                    if "repeater" in node_type.lower():
+                        icon = "mdi:radio-tower"
+                    elif "client" in node_type.lower():
+                        icon = "mdi:cellphone-wireless"
+                    elif "room" in node_type.lower():
+                        icon = "mdi:forum"
+                    else:
+                        icon = "mdi:access-point"
+                    
+                    # Normalize accented chars but keep emojis
+                    display_name = self.normalize_display_name(name)
+                    
+                    self.set_state(
+                        entity_id,
+                        state="home",
+                        attributes={
+                            "friendly_name": f"Hop: {display_name}",
+                            "source_type": "gps",
+                            "latitude": coords["lat"],
+                            "longitude": coords["lon"],
+                            "gps_accuracy": 50,
+                            "source": "meshcore_hop",
+                            "node_name": display_name,
+                            "node_type": node_type,
+                            "pubkey": pubkey,
+                            "use_count": data.get("use_count", 0),
+                            "last_used": data.get("last_used", 0),
+                            "icon": icon
+                        }
+                    )
             
             self.log(f"Restored {len(self.hop_nodes_used)} hop node markers")
             
@@ -333,50 +400,83 @@ class MeshCorePathMap(hass.Hass):
         """Create/update device_tracker markers for all hop nodes used in paths"""
         try:
             import re
+            import unicodedata
             
+            # First pass: group nodes by sanitized name
+            nodes_by_name = {}
             for pubkey, data in self.hop_nodes_used.items():
                 coords = data["coords"]
                 name = coords.get("name", "Unknown")
-                node_type = coords.get("node_type", "Unknown")
                 
-                # Sanitize name for entity ID
-                safe_name = "".join(c if c.isalnum() or c == " " else "" for c in name.lower())
+                # Sanitize name for entity ID - ASCII only
+                normalized = unicodedata.normalize('NFKD', name.lower())
+                safe_name = "".join(c if (c.isalnum() and ord(c) < 128) or c == " " else "" for c in normalized)
                 safe_name = re.sub(r'\s+', '_', safe_name.strip())
                 safe_name = re.sub(r'_+', '_', safe_name)
                 safe_name = safe_name.strip('_')
                 if not safe_name:
-                    safe_name = pubkey[:8]
+                    safe_name = "unknown"
                 
-                entity_id = f"device_tracker.meshcore_hop_{safe_name}"
+                if safe_name not in nodes_by_name:
+                    nodes_by_name[safe_name] = []
+                nodes_by_name[safe_name].append((pubkey, data, coords))
+            
+            # Second pass: create entities, adding pubkey suffix only if needed for disambiguation
+            for safe_name, nodes in nodes_by_name.items():
+                # Check if nodes with same name are at different locations (>100m apart)
+                needs_disambiguation = False
+                if len(nodes) > 1:
+                    first_lat = nodes[0][2].get("lat", 0)
+                    first_lon = nodes[0][2].get("lon", 0)
+                    for _, _, coords in nodes[1:]:
+                        lat = coords.get("lat", 0)
+                        lon = coords.get("lon", 0)
+                        # Simple distance check (~100m threshold)
+                        if abs(lat - first_lat) > 0.001 or abs(lon - first_lon) > 0.001:
+                            needs_disambiguation = True
+                            break
                 
-                # Set icon based on node type
-                if "repeater" in node_type.lower():
-                    icon = "mdi:radio-tower"
-                elif "client" in node_type.lower():
-                    icon = "mdi:cellphone-wireless"
-                elif "room" in node_type.lower():
-                    icon = "mdi:forum"
-                else:
-                    icon = "mdi:access-point"
-                
-                self.set_state(
-                    entity_id,
-                    state="home",
-                    attributes={
-                        "friendly_name": f"Hop: {name}",
-                        "source_type": "gps",
-                        "latitude": coords["lat"],
-                        "longitude": coords["lon"],
-                        "gps_accuracy": 50,
-                        "source": "meshcore_hop",
-                        "node_name": name,
-                        "node_type": node_type,
-                        "pubkey": pubkey,
-                        "use_count": data["use_count"],
-                        "last_used": data["last_used"],
-                        "icon": icon
-                    }
-                )
+                for pubkey, data, coords in nodes:
+                    name = coords.get("name", "Unknown")
+                    node_type = coords.get("node_type", "Unknown")
+                    
+                    # Add pubkey suffix only if disambiguation needed
+                    if needs_disambiguation:
+                        entity_id = f"device_tracker.meshcore_hop_{safe_name}_{pubkey[:6]}"
+                    else:
+                        entity_id = f"device_tracker.meshcore_hop_{safe_name}"
+                    
+                    # Set icon based on node type
+                    if "repeater" in node_type.lower():
+                        icon = "mdi:radio-tower"
+                    elif "client" in node_type.lower():
+                        icon = "mdi:cellphone-wireless"
+                    elif "room" in node_type.lower():
+                        icon = "mdi:forum"
+                    else:
+                        icon = "mdi:access-point"
+                    
+                    # Normalize accented chars but keep emojis
+                    display_name = self.normalize_display_name(name)
+                    
+                    self.set_state(
+                        entity_id,
+                        state="home",
+                        attributes={
+                            "friendly_name": f"Hop: {display_name}",
+                            "source_type": "gps",
+                            "latitude": coords["lat"],
+                            "longitude": coords["lon"],
+                            "gps_accuracy": 50,
+                            "source": "meshcore_hop",
+                            "node_name": display_name,
+                            "node_type": node_type,
+                            "pubkey": pubkey,
+                            "use_count": data["use_count"],
+                            "last_used": data["last_used"],
+                            "icon": icon
+                        }
+                    )
             
             # Update the hop entities sensor
             self.update_hop_entities_sensor()
@@ -427,14 +527,20 @@ class MeshCorePathMap(hass.Hass):
     def create_path_tracker(self, sender_name, path_coords, timestamp):
         """Create a device_tracker that traces through the path points"""
         try:
-            # Sanitize name for entity ID - remove special chars, emojis, etc
+            # Sanitize name for entity ID - ASCII alphanumeric only
             import re
-            safe_name = "".join(c if c.isalnum() or c == " " else "" for c in sender_name.lower())
+            import unicodedata
+            # First normalize accented chars to ASCII equivalents
+            normalized = unicodedata.normalize('NFKD', sender_name.lower())
+            # Keep only ASCII alphanumeric and spaces
+            safe_name = "".join(c if (c.isalnum() and ord(c) < 128) or c == " " else "" for c in normalized)
             safe_name = re.sub(r'\s+', '_', safe_name.strip())  # Replace spaces with underscores
             safe_name = re.sub(r'_+', '_', safe_name)  # Remove consecutive underscores
             safe_name = safe_name.strip('_')  # Remove leading/trailing underscores
             if not safe_name:
                 safe_name = "unknown"
+            
+            display_name = self.normalize_display_name(sender_name)
             
             entity_id = f"device_tracker.meshcore_path_{safe_name}"
             
@@ -448,11 +554,15 @@ class MeshCorePathMap(hass.Hass):
             # Update the tracker through each point in the path
             # This creates history that the map will show as a line
             for i, coord in enumerate(path_coords):
+                # Normalize node_name - accents to ASCII, keep emojis
+                node_name = coord.get("name", "Unknown")
+                safe_node_name = self.normalize_display_name(node_name)
+                
                 self.set_state(
                     entity_id,
                     state="home",
                     attributes={
-                        "friendly_name": f"Path: {sender_name}",
+                        "friendly_name": f"Path: {display_name}",
                         "source_type": "gps",
                         "latitude": coord["lat"],
                         "longitude": coord["lon"],
@@ -460,7 +570,7 @@ class MeshCorePathMap(hass.Hass):
                         "source": "meshcore_path",
                         "path_point": i + 1,
                         "total_points": len(path_coords),
-                        "node_name": coord.get("name", "Unknown"),
+                        "node_name": safe_node_name,
                         "icon": "mdi:map-marker-path"
                     }
                 )
