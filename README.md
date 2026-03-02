@@ -1,8 +1,8 @@
 # MeshCore Home Assistant Panel v2
 
-A comprehensive Home Assistant dashboard for [MeshCore](https://meshcore.co.uk/) mesh networking, featuring interactive maps, heatmaps, signal tracking, and automated contact management.
+A comprehensive Home Assistant dashboard for [MeshCore](https://meshcore.co.uk/) mesh networking, featuring interactive maps, heatmaps, signal tracking, playback recording, and automated contact management.
 
-[![Heatmap Example](docs/images/heatmap.png)](docs/images/heatmap.png)
+![Heatmap Example](docs/images/last%20message.png)
 
 ## Features
 
@@ -11,6 +11,15 @@ A comprehensive Home Assistant dashboard for [MeshCore](https://meshcore.co.uk/)
 * **Node Map** - Shows all nodes by type (Repeater 📡, Client 📱, Room Server 💬)
 * **Hop Frequency Heatmap** - Visualizes which repeaters handle the most traffic
 * **Direct Links Heatmap** - Shows 1-hop direct connections between nodes
+
+### ⏪ Playback Recording (NEW!)
+
+* **24-hour history** - Snapshots recorded every 5 minutes
+* **Timeline scrubbing** - Drag slider to view past network state
+* **Playback controls** - Play, pause, and go live
+* **Threshold filter slider** - Filter playback by time window (1h-48h or ALL)
+
+![Direct Links Playback](docs/images/direct%20links.png)
 
 ### 📊 Signal Tracking
 
@@ -21,7 +30,7 @@ A comprehensive Home Assistant dashboard for [MeshCore](https://meshcore.co.uk/)
 
 ### 🤖 Automation
 
-* **Auto-greeting** - Welcomes new companions on Public channel
+* **Auto-greeting** - Welcomes new companions on Public channel (configurable)
 * **Auto-cleanup** - Removes old contacts (30+ days) from HA and device
 * **Persistence** - Survives HA reboots (hops data, last messages, greeted list)
 
@@ -78,6 +87,7 @@ meshcore_greeter.py           # Auto-greet new contacts
 meshcore_heatmap_export.py    # Heatmap data export
 meshcore_nodemap_export.py    # Node map data export
 meshcore_directlinks_export.py # Direct links data export
+meshcore_snapshot_recorder.py  # NEW: Playback recording
 ```
 
 You can copy files using:
@@ -94,7 +104,7 @@ Edit `apps.yaml` in the same folder as the Python files:
 
 Add this content:
 
-```
+```yaml
 meshcore_hops:
   module: meshcore_hops
   class: MeshCoreHops
@@ -102,6 +112,7 @@ meshcore_hops:
 meshcore_paths:
   module: meshcore_paths
   class: MeshCorePathMap
+  my_pubkey: "YOUR_PUBKEY_HERE"
 
 meshcore_cleanup:
   module: meshcore_cleanup
@@ -110,6 +121,8 @@ meshcore_cleanup:
 meshcore_greeter:
   module: meshcore_greeter
   class: MeshCoreGreeter
+  my_name: "Your Repeater Name"
+  hops_distant: 5
 
 meshcore_heatmap_export:
   module: meshcore_heatmap_export
@@ -122,6 +135,10 @@ meshcore_nodemap_export:
 meshcore_directlinks_export:
   module: meshcore_directlinks_export
   class: MeshCoreDirectLinksExport
+
+meshcore_snapshot_recorder:
+  module: meshcore_snapshot_recorder
+  class: MeshCoreSnapshotRecorder
 ```
 
 ### 4. Install HTML Map Pages
@@ -131,9 +148,9 @@ Copy files from this repo's `www/` folder to your Home Assistant www folder:
 **Important:** Always use `/config/www/` (not the AppDaemon folder!)
 
 ```
-/config/www/meshcore_heatmap.html
+/config/www/meshcore_heatmap_playback.html
 /config/www/meshcore_nodemap.html
-/config/www/meshcore_directlinks.html
+/config/www/meshcore_directlinks_playback.html
 ```
 
 ### 5. Create Input Helpers
@@ -152,7 +169,7 @@ Create 3 number helpers with these settings:
 
 **Example Number Helper:**
 
-[![Number Helper Example](docs/images/helper_number_example.png)](docs/images/helper_number_example.png)
+![Number Helper Example](docs/images/helper_number_example.png)
 
 #### Dropdown Helper
 
@@ -164,14 +181,17 @@ Create 1 dropdown helper:
 
 **Example Dropdown Helper:**
 
-[![Dropdown Helper Example](docs/images/helper_dropdown_example.png)](docs/images/helper_dropdown_example.png)
+![Dropdown Helper Example](docs/images/helper_dropdown_example.png)
 
 ### 6. Configure Your Pubkey
 
-Edit `meshcore_paths.py` line 21 to set your MeshCore device's pubkey:
+Set your MeshCore device's pubkey in `apps.yaml`:
 
-```
-self.my_repeater_pubkey = "YOUR_PUBKEY_HERE"
+```yaml
+meshcore_paths:
+  module: meshcore_paths
+  class: MeshCorePathMap
+  my_pubkey: "Your pubkey"
 ```
 
 **To find your pubkey:**
@@ -193,9 +213,9 @@ Check the logs for any errors: **Settings → Add-ons → AppDaemon → Log**
 
 Test with a simple iframe card first:
 
-```
+```yaml
 type: iframe
-url: /local/meshcore_heatmap.html
+url: /local/meshcore_heatmap_playback.html
 aspect_ratio: "4:3"
 ```
 
@@ -205,23 +225,64 @@ See `dashboards/` folder for full dashboard examples.
 
 ## Configuration
 
-### meshcore\_greeter.py
+### meshcore_greeter.py
 
-Edit these settings:
+Configure via `apps.yaml`:
 
+```yaml
+meshcore_greeter:
+  module: meshcore_greeter
+  class: MeshCoreGreeter
+  my_name: "Your Repeater Name"   # Name shown in greeting messages
+  hops_distant: 5                  # Max hops to greet (nodes further away ignored)
 ```
-self.max_hops = 5           # Max hops to greet
-self.greet_channel = 0      # 0 = Public
-self.my_name = "MyRepeater" # Your name in greeting
-```
 
-### meshcore\_cleanup.py
+**Note:** `my_name` is just a display name for greetings, not the pubkey.
+
+#### Test Greeting
+
+To test the greeter is working:
+
+1. Go to **Developer Tools → Events**
+2. Fire event: `meshcore_greeter_test`
+3. You should see the test message in the public channel
+
+### meshcore_cleanup.py
 
 Default is 30 days. Edit line 25:
 
-```
+```python
 threshold_days = 30
 ```
+
+### meshcore_snapshot_recorder.py
+
+Default settings:
+- **24 hours** of rolling history
+- **288 snapshots** maximum (5-minute intervals)
+- Snapshots only saved when data changes
+
+## Playback Feature
+
+The heatmap and direct links maps now include playback controls:
+
+![Last Message Playback](docs/images/last%20message.png)
+
+### Controls
+
+| Button | Function |
+| --- | --- |
+| ▶️ | Play through history |
+| 🔴 LIVE | Return to live data |
+| Timeline slider | Scrub through 24h history |
+| Filter slider | Filter by time window (1h-48h or ALL) |
+
+### How it works
+
+1. `meshcore_snapshot_recorder.py` takes snapshots every 5 minutes
+2. Snapshots are saved to `/config/www/meshcore_*_history.json`
+3. Old snapshots (>24h) are automatically cleaned up
+4. Playback HTML loads history and allows timeline scrubbing
 
 ## Data Persistence
 
@@ -234,8 +295,10 @@ The following data survives HA reboots:
 | `/config/www/meshcore_hops_data.json` | Hop node use counts |
 | `/config/www/meshcore_greeted.json` | Greeted contacts list |
 | `/config/www/meshcore_directlinks_persist.json` | Direct link connections |
+| `/config/www/meshcore_heatmap_history.json` | Heatmap playback history (24h) |
+| `/config/www/meshcore_directlinks_history.json` | Direct links playback history (24h) |
 
-Data older than 7 days is automatically cleaned up.
+Data older than 7 days is automatically cleaned up (except playback history which is 24h).
 
 ## Entities Created
 
@@ -253,17 +316,17 @@ Data older than 7 days is automatically cleaned up.
 
 ## Screenshots
 
-### Hop Frequency Heatmap
+### Hop Frequency Heatmap (with Playback)
 
-[![Heatmap](docs/images/heatmap.png)](docs/images/heatmap.png)
+![Heatmap](docs/images/last%20message.png)
 
 ### Node Type Map
 
-[![Node Map](docs/images/nodemap.png)](docs/images/nodemap.png)
+![Node Map](docs/images/nodemap.png)
 
-### Direct Links Map
+### Direct Links Map (with Playback)
 
-[![Direct Links](docs/images/directlinks.png)](docs/images/directlinks.png)
+![Direct Links](docs/images/direct%20links.png)
 
 ## Troubleshooting
 
@@ -275,7 +338,7 @@ If you see this error in AppDaemon logs:
 ERROR HASS: Error from aiohttp websocket: Message size XXXXXXX exceeds limit 4194304
 ```
 
-This means your Home Assistant state is too large to send over the default WebSocket connection. Fix it by adding the following to your `configuration.yaml` (at the root level, not nested under `homeassistant:` or `http:`):
+This means your Home Assistant state is too large to send over the default WebSocket connection. Fix it by adding the following to your `configuration.yaml` at the root level (not nested under `homeassistant:` or `http:`):
 
 ```yaml
 websocket_api:
@@ -295,7 +358,7 @@ Then restart Home Assistant. This is most likely to affect larger installations 
 
 * Make sure files are in `/config/www/` (not `/addon_configs/.../www/`)
 * Restart Home Assistant after adding files
-* Try accessing directly: `http://YOUR_HA_IP:8123/local/meshcore_heatmap.html`
+* Try accessing directly: `http://YOUR_HA_IP:8123/local/meshcore_heatmap_playback.html`
 
 ### Input helpers not working
 
@@ -313,6 +376,18 @@ Then restart Home Assistant. This is most likely to affect larger installations 
 1. Check AppDaemon logs at 3am
 2. Verify MeshCore services are available
 3. Check `last_advert` and `last_message` attributes
+
+### Greeter not sending messages
+
+1. Check service name: `meshcore.send_channel_message`
+2. Test manually in **Developer Tools → Services**
+3. Fire test event: `meshcore_greeter_test` in **Developer Tools → Events**
+
+### Playback not showing data
+
+1. Wait for snapshots to accumulate (5 min intervals)
+2. Check `/config/www/meshcore_heatmap_history.json` exists
+3. Verify `meshcore_snapshot_recorder` in AppDaemon logs
 
 ## Credits
 
