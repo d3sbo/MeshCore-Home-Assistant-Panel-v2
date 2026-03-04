@@ -137,7 +137,7 @@ appdaemon:
   plugins:
     HASS:
       type: hass
-      ha_url: http://192.168.0.250:8123
+      ha_url: http://YOUR_HOMEASSISTANT_IP
       token: YOUR_LONG_LIVED_TOKEN_HERE
 http:
   url: http://0.0.0.0:5050
