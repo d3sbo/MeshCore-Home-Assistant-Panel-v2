@@ -31,8 +31,8 @@ class MeshCoreGreeter(hass.Hass):
         # Your name for the greeting
         self.my_name = self.args.get("my_name", "MyRepeater")
         
-        # Listen for new contact sensors being created
-        self.listen_state(self.handle_contact_change, "binary_sensor")
+        # Listen for meshcore contact sensor changes only
+        self.listen_state(self.handle_contact_change, "binary_sensor.meshcore_", attribute="all")
         
         # Also listen for meshcore events for first advertisement
         self.listen_event(self.handle_new_contact_event, "meshcore_raw_event")

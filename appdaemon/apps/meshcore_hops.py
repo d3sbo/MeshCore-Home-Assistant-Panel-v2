@@ -34,8 +34,8 @@ class MeshCoreHops(hass.Hass):
         # Listen for raw meshcore events
         self.listen_event(self.handle_raw_event, "meshcore_raw_event")
         
-        # Listen for contact sensor changes (for advertisement-based SNR/RSSI and cache updates)
-        self.listen_state(self.handle_contact_update, "binary_sensor", attribute="all")
+        # Listen for meshcore contact sensor changes only
+        self.listen_state(self.handle_contact_update, "binary_sensor.meshcore_", attribute="all")
         
         # Periodic persistence save
         self.run_every(self.save_persisted_data, "now+120", 300)  # Every 5 minutes
