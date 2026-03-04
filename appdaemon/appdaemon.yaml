@@ -8,8 +8,8 @@ appdaemon:
   plugins:
     HASS:
       type: hass
-      ha_url: http://192.168.0.250:8123
-      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI4OTVlNDY5OWQwYmE0N2EyOWVkZGU0Mzc3ZTRmM2E4YiIsImlhdCI6MTc3MjU2NjEyMCwiZXhwIjoyMDg3OTI2MTIwfQ.nZKBXVfPCfbqEooh2Zl18G1wB9E_NnkTHNAII6Gd1LQ
+      ha_url: http://YOUR_HOMEASSISTANT_IP:8123
+      token: YOUR_LONG_LIVED_TOKEN_HERE
 http:
   url: http://0.0.0.0:5050
 admin:
