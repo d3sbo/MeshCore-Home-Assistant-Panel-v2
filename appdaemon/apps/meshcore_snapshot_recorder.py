@@ -115,8 +115,8 @@ class MeshCoreSnapshotRecorder(hass.Hass):
         try:
             event_type = data.get("event_type", "")
             
-            # Only snapshot on message events
-            if "MSG" in event_type or "LOG" in event_type:
+            # Only snapshot on actual message/data events - not NO_MORE_MSGS or battery polls
+            if event_type in ("EventType.RX_LOG_DATA", "EventType.CONTACT_MSG_RECV", "EventType.CHANNEL_MSG_RECV"):
                 # Rate limit - don't snapshot more than once per 30 seconds
                 now = time.time()
                 if (now - self.last_snapshot_time) >= self.min_snapshot_gap:
