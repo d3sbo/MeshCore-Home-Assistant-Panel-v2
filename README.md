@@ -12,7 +12,7 @@ A comprehensive Home Assistant dashboard for [MeshCore](https://meshcore.co.uk/)
 * **Hop Frequency Heatmap** - Visualizes which repeaters handle the most traffic
 * **Direct Links Heatmap** - Shows 1-hop direct connections between nodes
 
-### ⏪ Playback Recording (NEW!)
+### ⏪ Playback Recording
 
 * **24-hour history** - Snapshots recorded every 5 minutes
 * **Timeline scrubbing** - Drag slider to view past network state
@@ -87,7 +87,7 @@ meshcore_greeter.py           # Auto-greet new contacts
 meshcore_heatmap_export.py    # Heatmap data export
 meshcore_nodemap_export.py    # Node map data export
 meshcore_directlinks_export.py # Direct links data export
-meshcore_snapshot_recorder.py  # NEW: Playback recording
+meshcore_snapshot_recorder.py  # Playback recording
 ```
 
 You can copy files using:
@@ -98,11 +98,70 @@ You can copy files using:
 
 ### 3. Configure AppDaemon
 
+Edit `appdaemon.yaml` in the AppDaemon config folder:
+
+**For Home Assistant OS:** `/addon_configs/a0d7b954_appdaemon/appdaemon.yaml`
+
+#### Option A: Default (via Supervisor proxy) — simple but limited
+
+The default AppDaemon add-on configuration connects via the HA Supervisor proxy. This is the easiest setup but has a **4MB WebSocket message size limit** that can cause crashes on larger installations.
+
+```yaml
+---
+appdaemon:
+  latitude: 51.5
+  longitude: -0.1
+  elevation: 10
+  time_zone: Europe/London
+  plugins:
+    HASS:
+      type: hass
+http:
+  url: http://0.0.0.0:5050
+admin:
+api:
+hadashboard:
+```
+
+#### Option B: Direct connection (recommended for larger installations)
+
+If you have many entities or see WebSocket message size errors, connect AppDaemon directly to Home Assistant using a long-lived token. This bypasses the Supervisor proxy and its 4MB limit.
+
+```yaml
+---
+appdaemon:
+  latitude: 51.5
+  longitude: -0.1
+  elevation: 10
+  time_zone: Europe/London
+  plugins:
+    HASS:
+      type: hass
+      ha_url: http://192.168.0.250:8123
+      token: YOUR_LONG_LIVED_TOKEN_HERE
+http:
+  url: http://0.0.0.0:5050
+admin:
+api:
+hadashboard:
+```
+
+**To create a long-lived token:**
+
+1. Go to your HA profile page (click your name in the bottom-left)
+2. Scroll to **Long-Lived Access Tokens** at the bottom
+3. Click **Create Token**, give it a name (e.g. "AppDaemon")
+4. Copy the token and paste it into `appdaemon.yaml`
+
+> ⚠️ **Security note:** If you have `ip_ban_enabled: true` in `configuration.yaml`, direct connections using a long-lived token may trigger IP bans after failed login attempts during testing. You can temporarily disable banning while setting up: set `ip_ban_enabled: false`, configure the direct connection, then re-enable it once AppDaemon is connecting successfully.
+
+> ℹ️ **Note:** The `secrets:` reference in `appdaemon.yaml` only works when connecting via the Supervisor proxy. When using direct connection with `ha_url`, you must embed the token directly in `appdaemon.yaml` — `!secret` references are not resolved.
+
+### 4. Configure Apps
+
 Edit `apps.yaml` in the same folder as the Python files:
 
 **For Home Assistant OS:** `/addon_configs/a0d7b954_appdaemon/apps/apps.yaml`
-
-Add this content:
 
 ```yaml
 meshcore_hops:
@@ -141,7 +200,7 @@ meshcore_snapshot_recorder:
   class: MeshCoreSnapshotRecorder
 ```
 
-### 4. Install HTML Map Pages
+### 5. Install HTML Map Pages
 
 Copy files from this repo's `www/` folder to your Home Assistant www folder:
 
@@ -153,7 +212,7 @@ Copy files from this repo's `www/` folder to your Home Assistant www folder:
 /config/www/meshcore_directlinks_playback.html
 ```
 
-### 5. Create Input Helpers
+### 6. Create Input Helpers
 
 Go to **Settings → Devices & Services → Helpers → Create Helper**
 
@@ -167,10 +226,6 @@ Create 3 number helpers with these settings:
 | `meshcore_messages_threshold_hours` | `input_number.meshcore_messages_threshold_hours` | 1 | 720 | 1 | 24 |
 | `meshcore_heatmap_threshold_hours` | `input_number.meshcore_heatmap_threshold_hours` | 1 | 720 | 1 | 168 |
 
-**Example Number Helper:**
-
-![Number Helper Example](docs/images/helper_number_example.png)
-
 #### Dropdown Helper
 
 Create 1 dropdown helper:
@@ -179,11 +234,7 @@ Create 1 dropdown helper:
 | --- | --- | --- |
 | `meshcore_sort_by` | `input_select.meshcore_sort_by` | `Last Advert`, `Last Message`, `Direct Links` |
 
-**Example Dropdown Helper:**
-
-![Dropdown Helper Example](docs/images/helper_dropdown_example.png)
-
-### 6. Configure Your Pubkey
+### 7. Configure Your Pubkey
 
 Set your MeshCore device's pubkey in `apps.yaml`:
 
@@ -203,13 +254,13 @@ meshcore_paths:
 
 This works for both Repeaters and Companion clients.
 
-### 7. Restart AppDaemon
+### 8. Restart AppDaemon
 
 Go to **Settings → Add-ons → AppDaemon → Restart**
 
 Check the logs for any errors: **Settings → Add-ons → AppDaemon → Log**
 
-### 8. Add Dashboard Cards
+### 9. Add Dashboard Cards
 
 Test with a simple iframe card first:
 
@@ -264,9 +315,7 @@ Default settings:
 
 ## Playback Feature
 
-The heatmap and direct links maps now include playback controls:
-
-![Last Message Playback](docs/images/last%20message.png)
+The heatmap and direct links maps include playback controls:
 
 ### Controls
 
@@ -338,14 +387,30 @@ If you see this error in AppDaemon logs:
 ERROR HASS: Error from aiohttp websocket: Message size XXXXXXX exceeds limit 4194304
 ```
 
-This means your Home Assistant state is too large to send over the default WebSocket connection. Fix it by adding the following to your `configuration.yaml` at the root level (not nested under `homeassistant:` or `http:`):
+The Supervisor proxy has a hard 4MB WebSocket message limit. On larger installations with many entities, HA state updates can exceed this. Fix it by switching to a direct connection — see **Option B** in the AppDaemon configuration section above.
+
+Alternatively, if you prefer to stay on the proxy connection, add the following to `configuration.yaml`:
 
 ```yaml
 websocket_api:
   max_message_size: 8388608
 ```
 
-Then restart Home Assistant. This is most likely to affect larger installations with many entities.
+Then restart Home Assistant.
+
+### AppDaemon callback queues growing continuously
+
+If you see large and growing thread queue warnings in the AppDaemon logs like:
+
+```
+WARNING thread-3 queue size: 2000+ (meshcore_paths processing)
+```
+
+This is caused by `listen_state` listeners registered against broad entity domains (e.g. `"sensor"` or `"binary_sensor"`). These fire on every state change in HA, including changes made by the apps themselves, creating a feedback cascade.
+
+All apps in this repo have been updated to use `listen_event("meshcore_raw_event")` directly instead of watching sensor state. If you are running older versions of the scripts, update to the latest versions.
+
+You can monitor callback counts in the AppDaemon admin UI at `http://YOUR_HA_IP:5050` under the **Apps** tab.
 
 ### Maps not showing data
 
@@ -367,9 +432,10 @@ Then restart Home Assistant. This is most likely to affect larger installations 
 
 ### Paths not appearing
 
-1. Ensure `meshcore_hops.py` is receiving `meshcore_raw_event` events
-2. Check that contacts have coordinates (lat/lon)
-3. Verify `path_nodes` attribute exists on hops sensors
+1. Check that `meshcore_raw_event` events with `event_type: EventType.RX_LOG_DATA` are firing in **Developer Tools → Events**
+2. Confirm the decrypted section contains `text` and `decrypted: true` — undecrypted packets are skipped
+3. Check that contacts have coordinates (lat/lon) in their binary sensor attributes
+4. Verify path has at least 2 nodes — direct (1-hop) messages don't produce a path line
 
 ### Cleanup not working
 
