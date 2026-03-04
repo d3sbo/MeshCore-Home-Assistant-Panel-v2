@@ -66,6 +66,25 @@ class MeshCoreHeatmapExport(hass.Hass):
                             "node_type": node_type.lower() if node_type else "unknown"
                         })
             
+            # Build pubkey prefix -> coords lookup from contact sensors
+            prefix_to_coords = {}
+            for entity_id, state_data in all_states.items():
+                if not (entity_id.startswith("binary_sensor.meshcore_") and "_contact" in entity_id):
+                    continue
+                attrs = state_data.get("attributes", {}) if state_data else {}
+                pubkey = attrs.get("pubkey_prefix", "").lower()
+                lat = attrs.get("adv_lat") or attrs.get("latitude")
+                lon = attrs.get("adv_lon") or attrs.get("longitude")
+                name = attrs.get("adv_name") or attrs.get("friendly_name", "").replace(" Contact", "")
+                if pubkey and lat is not None and lon is not None:
+                    for length in [2, 4, 6, 8, 10, 12, len(pubkey)]:
+                        if len(pubkey) >= length:
+                            short_key = pubkey[:length]
+                            if short_key not in prefix_to_coords:
+                                prefix_to_coords[short_key] = {
+                                    "lat": float(lat), "lon": float(lon), "name": name
+                                }
+
             # Collect recent paths from hops sensors
             for entity_id, state_data in all_states.items():
                 if entity_id.startswith("sensor.meshcore_hops_"):
@@ -79,19 +98,11 @@ class MeshCoreHeatmapExport(hass.Hass):
                     sender_name = attrs.get("sender_name", "Unknown")
                     
                     if len(path_nodes) >= 2:
-                        # Build path coordinates
                         path_coords = []
                         for node_prefix in path_nodes:
-                            # Find matching hop node coordinates
-                            for hop in hop_data:
-                                # Simple match - check if hop name contains the prefix pattern
-                                if self.match_node_to_hop(node_prefix, hop, all_states):
-                                    path_coords.append({
-                                        "lat": hop["lat"],
-                                        "lon": hop["lon"],
-                                        "name": hop["name"]
-                                    })
-                                    break
+                            coords = prefix_to_coords.get(node_prefix.lower())
+                            if coords:
+                                path_coords.append(coords)
                         
                         if len(path_coords) >= 2:
                             path_data.append({
@@ -126,15 +137,4 @@ class MeshCoreHeatmapExport(hass.Hass):
             
         except Exception as e:
             self.log(f"Error exporting heatmap data: {e}", level="ERROR")
-    
-    def match_node_to_hop(self, node_prefix, hop, all_states):
-        """Match a 2-char node prefix to a hop node"""
-        # Look up the hop's pubkey from device_tracker attributes
-        for entity_id, state_data in all_states.items():
-            if entity_id.startswith("device_tracker.meshcore_hop_"):
-                attrs = state_data.get("attributes", {}) if state_data else {}
-                if attrs.get("node_name") == hop["name"]:
-                    pubkey = attrs.get("pubkey", "")
-                    if pubkey.lower().startswith(node_prefix.lower()):
-                        return True
-        return False
+
