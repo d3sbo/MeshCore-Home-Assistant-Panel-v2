@@ -137,7 +137,7 @@ appdaemon:
   plugins:
     HASS:
       type: hass
-      ha_url: http://YOUR_HOMEASSISTANT_IP
+      ha_url: http://192.168.0.250:8123
       token: YOUR_LONG_LIVED_TOKEN_HERE
 http:
   url: http://0.0.0.0:5050
@@ -389,14 +389,17 @@ ERROR HASS: Error from aiohttp websocket: Message size XXXXXXX exceeds limit 419
 
 The Supervisor proxy has a hard 4MB WebSocket message limit. On larger installations with many entities, HA state updates can exceed this. Fix it by switching to a direct connection — see **Option B** in the AppDaemon configuration section above.
 
-Alternatively, if you prefer to stay on the proxy connection, add the following to `configuration.yaml`:
+Alternatively, add the following to `configuration.yaml` (works for both proxy and direct connections):
 
 ```yaml
+# Configure a default setup of Home Assistant (frontend, api, etc)
+default_config:
+
 websocket_api:
-  max_message_size: 8388608
+  max_message_size: 33554432
 ```
 
-Then restart Home Assistant.
+Then restart **Home Assistant** (not just AppDaemon). The `websocket_api` block must be at the root level, not nested under `homeassistant:` or `http:`.
 
 ### AppDaemon callback queues growing continuously
 
