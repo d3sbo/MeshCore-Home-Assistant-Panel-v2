@@ -1,1 +1,5 @@
+# Configure a default setup of Home Assistant (frontend, api, etc)
+default_config:
 
+websocket_api:
+  max_message_size: 33554432
