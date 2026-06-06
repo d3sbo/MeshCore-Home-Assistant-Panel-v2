@@ -188,6 +188,21 @@
   </div>
 
   <script>
+    // ── XSS fix (CVE-2026-45323 class) ───────────────────────────────────────
+    // adv_name and other mesh-sourced fields are not sanitised by the MeshCore
+    // firmware, meshcore_py SDK, or the HA integration. Escape every value
+    // before interpolating it into HTML to prevent script injection.
+    function escapeHtml(v) {
+      if (v === null || v === undefined) return "";
+      return String(v)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+    // ── End XSS fix ──────────────────────────────────────────────────────────
+
     // Initialize map centered on UK
     const map = L.map('map', {
       center: [52.3, 0],
@@ -348,9 +363,9 @@
           
           polyline.bindPopup(`
             <div style="text-align: center;">
-              <strong>${path.sender}</strong><br>
+              <strong>${escapeHtml(path.sender)}</strong><br>
               <span style="color: ${color}; font-size: 18px; font-weight: bold;">
-                ${path.hops}
+                ${escapeHtml(String(path.hops))}
               </span> hops
             </div>
           `);
@@ -399,9 +414,9 @@
 
         marker.bindPopup(`
           <div style="text-align: center;">
-            <strong>${node.name}</strong><br>
+            <strong>${escapeHtml(node.name)}</strong><br>
             <span style="color: ${color}; font-size: 18px; font-weight: bold;">
-              ${node.use_count}
+              ${escapeHtml(String(node.use_count))}
             </span> uses
           </div>
         `);
@@ -417,10 +432,10 @@
         const ratio = node.use_count / maxCount;
         const color = getColor(ratio);
         return `
-          <div class="node-item" data-node-name="${node.name}" onclick="highlightNodePaths('${node.name.replace(/'/g, "\\'")}')">
+          <div class="node-item" data-node-name="${escapeHtml(node.name)}" onclick="highlightNodePaths(this.dataset.nodeName)">
             <div class="node-dot" style="background: ${color};"></div>
-            <span class="node-name" title="${node.name}">${node.name}</span>
-            <span class="node-count">${node.use_count}</span>
+            <span class="node-name" title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span>
+            <span class="node-count">${escapeHtml(String(node.use_count))}</span>
           </div>
         `;
       }).join('');
