@@ -40,6 +40,16 @@ A comprehensive Home Assistant dashboard for [MeshCore](https://meshcore.co.uk/)
 * Dashed lines show routing through mesh
 * Color-coded by hop count or traffic intensity
 
+## Security
+
+A cross-site scripting (XSS) vulnerability affecting `adv_name` and other mesh-sourced fields was reported by [Sasha Romijn](https://mxsasha.eu/posts/meshcore-xss-home-assistant/) in March 2026 and assigned CVE-2026-45323. All five HTML map files have been patched as of June 2026:
+
+* Added `escapeHtml()` helper to encode all mesh-sourced data before HTML interpolation
+* Fixed all `bindPopup()`, `innerHTML`, `title` attribute, and `onclick` handler injection points
+* Removed the broken partial escape (single-quote-only regex) that was previously present
+
+If you are running an older version of the HTML files, update immediately. The vulnerability allows anyone within radio range of any repeater in your mesh to inject arbitrary HTML/JavaScript into your HA dashboard session.
+
 ## Requirements
 
 * Home Assistant 2024.1+
@@ -63,7 +73,28 @@ A comprehensive Home Assistant dashboard for [MeshCore](https://meshcore.co.uk/)
 
 ### 2. Install AppDaemon Scripts
 
-Download all `.py` files from this repo's `appdaemon/apps/` folder and copy them to your AppDaemon apps folder.
+> ⚠️ **Important:** Always download files using `git clone` or the Raw file URLs below. Do **not** copy-paste from the GitHub file view page — you will get the HTML of the webpage, not the Python source, and AppDaemon will fail with a `SyntaxError: invalid character '·'` on every file.
+
+Clone the repo (recommended):
+
+```bash
+git clone https://github.com/d3sbo/MeshCore-Home-Assistant-Panel-v2.git
+```
+
+Or download individual files using the raw URLs:
+
+```bash
+wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_hops.py
+wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_paths.py
+wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_cleanup.py
+wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_greeter.py
+wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_heatmap_export.py
+wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_nodemap_export.py
+wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_directlinks_export.py
+wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_snapshot_recorder.py
+```
+
+Copy the `.py` files to your AppDaemon apps folder:
 
 **For Home Assistant OS (Add-on):**
 
@@ -201,6 +232,8 @@ meshcore_snapshot_recorder:
 ```
 
 ### 5. Install HTML Map Pages
+
+> ⚠️ **Important:** Always download using `git clone` or the Raw file URLs. Do **not** copy-paste from the GitHub file view.
 
 Copy files from this repo's `www/` folder to your Home Assistant www folder:
 
@@ -379,6 +412,12 @@ Data older than 7 days is automatically cleaned up (except playback history whic
 
 ## Troubleshooting
 
+### compile_error on all apps — `invalid character '·'`
+
+This means you downloaded the GitHub **webpage HTML** instead of the raw Python files. The `·` character is part of GitHub's page title separator and ends up in the file if you copy from the browser.
+
+**Fix:** Use `git clone` or the `wget` raw URLs listed in the installation section above. Never copy-paste Python files from the GitHub file viewer.
+
 ### AppDaemon keeps stopping (WebSocket message size error)
 
 If you see this error in AppDaemon logs:
@@ -421,6 +460,13 @@ You can monitor callback counts in the AppDaemon admin UI at `http://YOUR_HA_IP:
 2. Verify JSON files exist in `/config/www/`
 3. Clear browser cache or hard refresh (Ctrl+Shift+R)
 4. Check browser console for JavaScript errors (F12)
+
+### Maps slow to load
+
+The map pages use [CartoDB dark tiles](https://carto.com/basemaps/) which load natively dark without any CSS filter. If maps are still slow:
+
+* Use a dedicated browser profile without extensions — password manager extensions (e.g. Bitwarden) scan the DOM continuously and significantly slow down complex pages like HA
+* The HTML files use `updateWhenIdle: true` so tiles only fetch when panning stops rather than continuously while moving
 
 ### HTML files not found
 
