@@ -121,7 +121,7 @@
     .threshold-control label { font-size: 10px; color: #888; }
     .threshold-slider { width: 70px; cursor: pointer; }
     .threshold-value { font-size: 11px; color: #60a5fa; min-width: 32px; }
-    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.2); }
+    /* CartoDB dark_all tiles — no invert filter needed */
     .leaflet-control-attribution { background: rgba(30, 30, 50, 0.8) !important; color: #666 !important; }
     .leaflet-control-attribution a { color: #888 !important; }
   </style>
@@ -181,8 +181,8 @@
     }
     // ── End XSS fix ──────────────────────────────────────────────────────────
 
-    const map = L.map('map', { center: [52.5, -1], zoom: 7, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    const map = L.map('map', { center: [52.32, -0.19], zoom: 10, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CartoDB', subdomains: 'abcd', maxZoom: 19, updateWhenIdle: true, keepBuffer: 1 }).addTo(map);
 
     let hopData = [], pathData = [], heatLayer = null, markers = [], pathLines = [];
     let selectedNode = null, markersVisible = true;
@@ -411,7 +411,7 @@
         return `<div class="node-item" data-node-name="${escapeHtml(node.name)}" onclick="highlightNodePaths(this.dataset.nodeName)"><div class="node-dot" style="background:${color};"></div><span class="node-name" title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span><span class="node-count">${escapeHtml(String(node.use_count))}</span></div>`;
       }).join('');
 
-      if (fitBounds && hopData.length > 1) map.fitBounds(L.latLngBounds(hopData.map(d => [d.lat, d.lon])), { padding: [50, 50] });
+      if (fitBounds && hopData.length > 1) { const b = L.latLngBounds(hopData.map(d => [d.lat, d.lon])); b.getNorthEast().distanceTo(b.getSouthWest()) > 500000 ? map.setView([52.32, -0.19], 10) : map.fitBounds(b, { padding: [50, 50] }); }
     }
 
     function fetchLiveData() {
