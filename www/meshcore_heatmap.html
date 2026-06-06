@@ -126,10 +126,7 @@
       color: #fff;
       font-weight: bold;
     }
-    /* Dark map tiles */
-    .leaflet-tile-pane {
-      filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.2);
-    }
+    /* CartoDB dark_all tiles — no invert filter needed */
     .leaflet-control-attribution {
       background: rgba(30, 30, 50, 0.8) !important;
       color: #666 !important;
@@ -205,14 +202,18 @@
 
     // Initialize map centered on UK
     const map = L.map('map', {
-      center: [52.3, 0],
-      zoom: 9,
+      center: [52.32, -0.19],
+      zoom: 10,
       zoomControl: true
     });
 
     // Dark map tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap'
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap © CartoDB',
+      subdomains: 'abcd',
+      maxZoom: 19,
+      updateWhenIdle: true,
+      keepBuffer: 1
     }).addTo(map);
 
     // Hop data - loaded from AppDaemon-generated JSON file
@@ -443,7 +444,12 @@
       // Only fit bounds on initial load
       if (fitBounds && hopData.length > 1) {
         const bounds = L.latLngBounds(hopData.map(d => [d.lat, d.lon]));
-        map.fitBounds(bounds, { padding: [50, 50] });
+        const boundsSize = bounds.getNorthEast().distanceTo(bounds.getSouthWest());
+        if (boundsSize > 500000) {
+          map.setView([52.32, -0.19], 10);
+        } else {
+          map.fitBounds(bounds, { padding: [50, 50] });
+        }
       }
     }
 
