@@ -205,6 +205,21 @@
   </div>
 
   <script>
+    // ── XSS fix (CVE-2026-45323 class) ───────────────────────────────────────
+    // adv_name and other mesh-sourced fields are not sanitised by the MeshCore
+    // firmware, meshcore_py SDK, or the HA integration. Escape every value
+    // before interpolating it into HTML to prevent script injection.
+    function escapeHtml(v) {
+      if (v === null || v === undefined) return "";
+      return String(v)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+    // ── End XSS fix ──────────────────────────────────────────────────────────
+
     // Initialize map centered on UK
     const map = L.map('map', {
       center: [52.3, 0],
@@ -362,9 +377,9 @@
         marker.bindPopup(`
           <div style="text-align: center;">
             <span style="font-size: 24px;">${icon}</span><br>
-            <strong>${node.name}</strong><br>
-            <span style="font-size: 11px; color: #888;">${node.node_type}</span><br>
-            <span style="font-size: 11px; color: #888;">${node.age_hours}h ago</span>
+            <strong>${escapeHtml(node.name)}</strong><br>
+            <span style="font-size: 11px; color: #888;">${escapeHtml(node.node_type)}</span><br>
+            <span style="font-size: 11px; color: #888;">${escapeHtml(String(node.age_hours))}h ago</span>
           </div>
         `);
 
@@ -383,12 +398,12 @@
       
       nodeList.innerHTML = sortedByAge.slice(0, 20).map(node => {
         const icon = getIcon(node.node_type);
-        const safeName = node.name.replace(/'/g, "\\'");
+        // safeName removed — escapeHtml() used instead (see XSS fix above)
         return `
           <div class="node-item">
             <span class="node-icon-small">${icon}</span>
-            <span class="node-name" title="${node.name}" onclick="highlightNode('${safeName}', ${node.lat}, ${node.lon})">${node.name}</span>
-            <span class="node-age">${node.age_hours}h</span>
+            <span class="node-name" title="${escapeHtml(node.name)}" onclick="highlightNode(this.getAttribute('data-name'), ${node.lat}, ${node.lon})" data-name="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span>
+            <span class="node-age">${escapeHtml(String(node.age_hours))}h</span>
           </div>
         `;
       }).join('');
