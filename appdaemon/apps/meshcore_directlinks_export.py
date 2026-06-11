@@ -33,6 +33,12 @@ class MeshCoreDirectLinksExport(hass.Hass):
         # Listen for threshold changes
         self.listen_state(self.export_directlinks_data, "input_number.meshcore_heatmap_threshold_hours")
 
+    def normalize_timestamp(self, ts):
+        """Convert millisecond timestamps to seconds if needed"""
+        if ts and isinstance(ts, (int, float)) and ts > 1e12:
+            return ts / 1000.0
+        return ts
+
     # -------------------------------------------------------------------------
     # Raw event handling
     # -------------------------------------------------------------------------
@@ -154,9 +160,11 @@ class MeshCoreDirectLinksExport(hass.Hass):
         """Get node coordinates and info from contact sensors"""
         matches = []
         for entity_id, state_data in all_states.items():
-            if not (entity_id.startswith("binary_sensor.meshcore_") and "_contact" in entity_id):
+            if not entity_id.startswith("binary_sensor.meshcore_"):
                 continue
             attrs = (state_data or {}).get("attributes", {})
+            if not attrs.get("pubkey_prefix") or not attrs.get("last_advert"):
+                continue
             pubkey = attrs.get("pubkey_prefix", "").lower()
             if not pubkey or not pubkey.startswith(pubkey_prefix):
                 continue
@@ -166,7 +174,7 @@ class MeshCoreDirectLinksExport(hass.Hass):
                 continue
             name = attrs.get("adv_name") or attrs.get("friendly_name", "").replace(" Contact", "")
             node_type = attrs.get("node_type_str", "Unknown").lower()
-            last_advert = attrs.get("last_advert", 0) or 0
+            last_advert = self.normalize_timestamp(attrs.get("last_advert", 0) or 0)
             matches.append({"name": name, "lat": float(lat), "lon": float(lon),
                             "pubkey": pubkey, "node_type": node_type, "last_advert": last_advert})
 
