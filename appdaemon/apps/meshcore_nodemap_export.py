@@ -8,6 +8,12 @@ class MeshCoreNodeMapExport(hass.Hass):
     Writes to /config/www/meshcore_nodemap_data.json
     """
 
+    def normalize_timestamp(self, ts):
+        """Convert millisecond timestamps to seconds if needed"""
+        if ts and isinstance(ts, (int, float)) and ts > 1e12:
+            return ts / 1000.0
+        return ts
+
     def initialize(self):
         self.log("MeshCoreNodeMapExport initialized")
         
@@ -42,16 +48,18 @@ class MeshCoreNodeMapExport(hass.Hass):
             
             # Collect nodes from contact sensors
             for entity_id, state_data in all_states.items():
-                if not (entity_id.startswith("binary_sensor.meshcore_") and 
-                        entity_id.endswith("_contact")):
+                if not entity_id.startswith("binary_sensor.meshcore_"):
                     continue
                 
                 attrs = state_data.get("attributes", {}) if state_data else {}
                 
+                if not attrs.get("pubkey_prefix") or not attrs.get("last_advert"):
+                    continue
+                
                 lat = attrs.get("adv_lat") or attrs.get("latitude")
                 lon = attrs.get("adv_lon") or attrs.get("longitude")
                 name = attrs.get("adv_name") or attrs.get("friendly_name", "").replace(" Contact", "")
-                last_advert = attrs.get("last_advert", 0)
+                last_advert = self.normalize_timestamp(attrs.get("last_advert", 0))
                 node_type = attrs.get("node_type_str", "Unknown")
                 
                 # Filter by threshold
@@ -59,8 +67,8 @@ class MeshCoreNodeMapExport(hass.Hass):
                     continue
                 
                 if lat and lon:
-                    # Calculate age in hours
-                    age_hours = (now_ts - last_advert) / 3600 if last_advert else 0
+                    # Calculate age in hours (clamp to 0 for nodes with future timestamps)
+                    age_hours = max(0, (now_ts - last_advert) / 3600) if last_advert else 0
                     
                     node_data.append({
                         "name": name,
