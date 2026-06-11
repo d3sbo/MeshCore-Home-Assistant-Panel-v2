@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MeshCore Direct Links</title>
+  <title>MeshCore Hop Frequency Heatmap</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
@@ -15,19 +15,43 @@
       color: #fff;
     }
     #map { width: 100%; height: 100vh; }
-    .stats {
+    .info-panel {
       position: absolute;
       top: 10px;
-      left: 10px;
+      right: 10px;
       background: rgba(30, 30, 50, 0.95);
-      padding: 12px;
+      padding: 15px;
       border-radius: 8px;
       z-index: 1000;
-      font-size: 12px;
+      max-width: 280px;
+      max-height: 400px;
+      overflow-y: auto;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
-    .stats h3 { color: #a855f7; margin-bottom: 8px; font-size: 14px; }
-    .stat-row { margin: 4px 0; color: #aaa; }
-    .stat-value { color: #fff; font-weight: bold; }
+    .info-panel h3 {
+      margin-bottom: 10px;
+      color: #60a5fa;
+      font-size: 14px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+      cursor: pointer;
+    }
+    .node-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #2a2a4a;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .node-item:hover { background: rgba(96, 165, 250, 0.2); }
+    .node-item.active { background: rgba(96, 165, 250, 0.3); }
+    .node-item:last-child { border-bottom: none; }
+    .node-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .node-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .node-count { color: #888; font-weight: bold; }
     .legend {
       position: absolute;
       bottom: 80px;
@@ -38,53 +62,22 @@
       z-index: 1000;
       font-size: 11px;
     }
-    .legend-title { margin-bottom: 8px; font-weight: bold; color: #a855f7; }
+    .legend-title { margin-bottom: 8px; font-weight: bold; color: #60a5fa; }
     .legend-item { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
-    .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
-    .info-panel {
+    .legend-dot { width: 14px; height: 14px; border-radius: 50%; }
+    .stats {
       position: absolute;
       top: 10px;
-      right: 10px;
+      left: 10px;
       background: rgba(30, 30, 50, 0.95);
-      padding: 15px;
+      padding: 12px;
       border-radius: 8px;
       z-index: 1000;
-      max-width: 250px;
-      max-height: 400px;
-      overflow-y: auto;
-    }
-    .info-panel h3 {
-      margin-bottom: 10px;
-      color: #a855f7;
-      font-size: 14px;
-      border-bottom: 1px solid #333;
-      padding-bottom: 8px;
-    }
-    .node-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 0;
-      border-bottom: 1px solid #2a2a4a;
-      font-size: 11px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .node-item:hover { background: rgba(168, 85, 247, 0.2); }
-    .node-item.active { background: rgba(168, 85, 247, 0.3); }
-    .node-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-    .node-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .node-count { color: #888; font-weight: bold; }
-    #node-search {
-      width: 100%;
-      padding: 6px;
-      margin-bottom: 10px;
-      background: #2a2a4a;
-      border: 1px solid #444;
-      border-radius: 4px;
-      color: #fff;
       font-size: 12px;
     }
+    .stats h3 { color: #60a5fa; margin-bottom: 8px; font-size: 14px; }
+    .stat-row { margin: 4px 0; color: #aaa; }
+    .stat-value { color: #fff; font-weight: bold; }
     .playback-panel {
       position: absolute;
       bottom: 20px;
@@ -100,7 +93,7 @@
       box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
     .playback-btn {
-      background: #a855f7;
+      background: #60a5fa;
       border: none;
       color: #fff;
       padding: 8px 12px;
@@ -109,14 +102,14 @@
       font-size: 14px;
       transition: background 0.2s;
     }
-    .playback-btn:hover { background: #9333ea; }
+    .playback-btn:hover { background: #3b82f6; }
     .playback-btn:disabled { background: #444; cursor: not-allowed; }
     .playback-btn.live { background: #ef4444; }
     .playback-slider { width: 200px; cursor: pointer; }
     .playback-time { color: #fff; font-size: 12px; min-width: 110px; text-align: center; }
     .playback-time.live { color: #ef4444; font-weight: bold; }
     .playback-info { color: #888; font-size: 11px; }
-    .snapshot-count { color: #a855f7; font-weight: bold; }
+    .snapshot-count { color: #60a5fa; font-weight: bold; }
     .threshold-control {
       display: flex;
       align-items: center;
@@ -127,7 +120,7 @@
     }
     .threshold-control label { font-size: 10px; color: #888; }
     .threshold-slider { width: 70px; cursor: pointer; }
-    .threshold-value { font-size: 11px; color: #a855f7; min-width: 32px; }
+    .threshold-value { font-size: 11px; color: #60a5fa; min-width: 32px; }
     /* Dark tiles natively - no CSS filter needed */
     .leaflet-control-attribution { background: rgba(30, 30, 50, 0.8) !important; color: #666 !important; }
     .leaflet-control-attribution a { color: #888 !important; }
@@ -137,25 +130,25 @@
   <div id="map"></div>
   
   <div class="stats">
-    <h3>🔗 Direct Links Heatmap</h3>
+    <h3>📡 Hop Frequency Heatmap</h3>
     <div class="stat-row">Time Window: <span class="stat-value" id="threshold-hours">--</span>h</div>
     <div class="stat-row">Nodes: <span class="stat-value" id="node-count">0</span></div>
-    <div class="stat-row">Direct Links: <span class="stat-value" id="link-count">0</span></div>
-    <div class="stat-row">Max Links: <span class="stat-value" id="max-links">0</span></div>
+    <div class="stat-row">Paths: <span class="stat-value" id="path-count">0</span></div>
+    <div class="stat-row">Total Traffic: <span class="stat-value" id="total-traffic">0</span></div>
+    <div class="stat-row">Max Uses: <span class="stat-value" id="max-uses">0</span></div>
   </div>
 
   <div class="legend">
-    <div class="legend-title">Link Density</div>
-    <div class="legend-item"><div class="legend-dot" style="background: #0000ff;"></div><span>1-2 links</span></div>
-    <div class="legend-item"><div class="legend-dot" style="background: #00ffff;"></div><span>3-5 links</span></div>
-    <div class="legend-item"><div class="legend-dot" style="background: #00ff00;"></div><span>6-10 links</span></div>
-    <div class="legend-item"><div class="legend-dot" style="background: #ffff00;"></div><span>11-20 links</span></div>
-    <div class="legend-item"><div class="legend-dot" style="background: #ff0000;"></div><span>20+ links</span></div>
+    <div class="legend-title">Traffic Intensity</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #0000ff;"></div><span>Low</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #00ffff;"></div><span>Light</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #00ff00;"></div><span>Medium</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #ffff00;"></div><span>High</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background: #ff0000;"></div><span>Very High</span></div>
   </div>
 
   <div class="info-panel">
-    <h3>🔗 Top Connected Nodes</h3>
-    <input type="text" id="node-search" placeholder="Search nodes..." oninput="filterNodes()">
+    <h3 id="toggle-paths">🔥 Top Hop Nodes <span id="paths-status">(visible)</span></h3>
     <div id="node-list"></div>
   </div>
 
@@ -173,7 +166,7 @@
   </div>
 
   <script>
-    const map = L.map('map', { center: [52.3, 0], zoom: 9, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
+    const map = L.map('map', { center: [52.5, -1], zoom: 7, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
 
     
@@ -188,16 +181,15 @@
         .replace(/'/g, '&#39;');
     }
 
-    let nodeData = [], linkData = [], heatLayer = null, markers = [], linkLines = [];
-    let selectedNode = null;
-    let allSnapshotLinks = []; // Store all links for highlighting regardless of threshold
+    let hopData = [], pathData = [], heatLayer = null, markers = [], pathLines = [];
+    let selectedNode = null, markersVisible = true;
 
     // Playback state - loaded from server
     let snapshots = [], isPlaying = false, playbackIndex = 0, playbackInterval = null, liveMode = true;
     const PLAYBACK_SPEED = 400;
 
     function loadSnapshots() {
-      fetch('/local/meshcore_directlinks_history.json?t=' + Date.now())
+      fetch('/local/meshcore_heatmap_history.json?t=' + Date.now())
         .then(r => r.json())
         .then(data => {
           if (data.snapshots && Array.isArray(data.snapshots)) {
@@ -253,7 +245,6 @@
     function goLive() {
       isPlaying = false;
       liveMode = true;
-      allSnapshotLinks = []; // Clear snapshot links when going live
       clearInterval(playbackInterval);
       document.getElementById('btn-play').textContent = '▶️';
       document.getElementById('btn-live').classList.add('live');
@@ -280,7 +271,7 @@
     let playbackThresholdHours = 48; // Default for playback (48 = show all)
     
     function loadThreshold() {
-      fetch('/local/meshcore_directlinks_data.json?t=' + Date.now())
+      fetch('/local/meshcore_heatmap_data.json?t=' + Date.now())
         .then(r => r.json())
         .then(data => {
           if (data.threshold_hours) {
@@ -302,34 +293,23 @@
       }
     });
 
-    function filterNodesByThreshold(nodes, links, snapshotTimestamp) {
-      if (!nodes || nodes.length === 0) return { nodes: [], links: [] };
+    function filterNodesByThreshold(nodes, snapshotTimestamp) {
+      if (!nodes || nodes.length === 0) return [];
       
-      // If threshold is 48+ (ALL), return all data
+      // If threshold is 48+ (ALL), return all nodes
       if (playbackThresholdHours >= 48) {
-        return { nodes: nodes, links: links || [] };
+        return nodes;
       }
       
-      // If nodes don't have last_seen timestamps, return all (old format data)
-      const hasTimestamps = nodes.some(n => n.last_seen !== undefined && n.last_seen > 0);
+      // If nodes don't have last_used timestamps, return all (old format data)
+      const hasTimestamps = nodes.some(n => n.last_used !== undefined && n.last_used > 0);
       if (!hasTimestamps) {
-        return { nodes: nodes, links: links || [] };
+        return nodes;
       }
       
       const thresholdSeconds = playbackThresholdHours * 3600;
       const cutoff = snapshotTimestamp - thresholdSeconds;
-      
-      const filteredNodes = nodes.filter(n => (n.last_seen || 0) >= cutoff);
-      const filteredNodeNames = new Set(filteredNodes.map(n => n.name));
-      
-      // Filter links to only include those between active nodes
-      const filteredLinks = (links || []).filter(l => 
-        (l.last_seen || 0) >= cutoff &&
-        filteredNodeNames.has(l.from_name) && 
-        filteredNodeNames.has(l.to_name)
-      );
-      
-      return { nodes: filteredNodes, links: filteredLinks };
+      return nodes.filter(n => (n.last_used || 0) >= cutoff);
     }
 
     function displaySnapshot(index) {
@@ -337,13 +317,9 @@
       const snapshot = snapshots[index];
       const snapshotTime = snapshot.timestamp;
       
-      // Store ALL links from snapshot for highlighting
-      allSnapshotLinks = snapshot.links || [];
-      
       // Filter nodes by playback threshold setting
-      const filtered = filterNodesByThreshold(snapshot.nodes || [], snapshot.links || [], snapshotTime);
-      nodeData = filtered.nodes;
-      linkData = filtered.links;
+      hopData = filterNodesByThreshold(snapshot.nodes || [], snapshotTime);
+      pathData = snapshot.paths || [];
       
       document.getElementById('playback-time').textContent = formatTime(snapshotTime);
       const thresholdDisplay = playbackThresholdHours >= 48 ? 'ALL' : playbackThresholdHours;
@@ -359,21 +335,24 @@
       return '#ff0000';
     }
 
-    function filterNodes() {
-      const searchTerm = document.getElementById('node-search').value.toLowerCase();
-      document.querySelectorAll('.node-item').forEach(item => {
-        item.style.display = item.dataset.nodeName.toLowerCase().includes(searchTerm) ? 'flex' : 'none';
-      });
+    function toggleMarkers() {
+      markersVisible = !markersVisible;
+      markers.forEach(m => m.setStyle({ fillOpacity: markersVisible ? 0.9 : 0, opacity: markersVisible ? 1 : 0 }));
+      document.getElementById('paths-status').textContent = markersVisible ? '(visible)' : '(hidden)';
     }
+    document.getElementById('toggle-paths').addEventListener('click', toggleMarkers);
 
-    function highlightNodeLinks(nodeName) {
+    function highlightNodePaths(nodeName) {
       selectedNode = selectedNode === nodeName ? null : nodeName;
       document.querySelectorAll('.node-item').forEach(item => {
         item.classList.toggle('active', item.dataset.nodeName === selectedNode);
       });
-      linkLines.forEach(line => {
+      pathLines.forEach(line => {
         if (selectedNode === null) line.setStyle({ opacity: 0 });
-        else if (line.fromName === selectedNode || line.toName === selectedNode) { line.setStyle({ opacity: 0.8, weight: 3 }); line.bringToFront(); }
+        else if (line.pathNodes && line.pathNodes.includes(selectedNode)) { 
+          line.setStyle({ opacity: 0.8, dashArray: '8, 8', weight: 3 }); 
+          line.bringToFront(); 
+        }
         else line.setStyle({ opacity: 0 });
       });
     }
@@ -382,58 +361,65 @@
       if (heatLayer) map.removeLayer(heatLayer);
       markers.forEach(m => map.removeLayer(m));
       markers = [];
-      linkLines.forEach(l => map.removeLayer(l));
-      linkLines = [];
-      if (nodeData.length === 0) return;
+      pathLines.forEach(l => map.removeLayer(l));
+      pathLines = [];
+      if (hopData.length === 0) return;
 
-      const maxLinks = Math.max(...nodeData.map(d => d.link_count), 1);
-      document.getElementById('node-count').textContent = nodeData.length;
-      document.getElementById('link-count').textContent = linkData.length;
-      document.getElementById('max-links').textContent = maxLinks;
+      const maxUses = Math.max(...hopData.map(d => d.use_count), 1);
+      const totalTraffic = hopData.reduce((sum, d) => sum + d.use_count, 0);
+      document.getElementById('node-count').textContent = hopData.length;
+      document.getElementById('path-count').textContent = pathData.length;
+      document.getElementById('total-traffic').textContent = totalTraffic;
+      document.getElementById('max-uses').textContent = maxUses;
 
-      const heatData = nodeData.map(node => [node.lat, node.lon, node.link_count / maxLinks]);
-      heatLayer = L.heatLayer(heatData, { radius: 45, blur: 30, maxZoom: 10, max: 1.0, minOpacity: 0.3,
-        gradient: { 0.0: '#0000ff', 0.25: '#00ffff', 0.5: '#00ff00', 0.75: '#ffff00', 1.0: '#ff0000' }
-      }).addTo(map);
-
-      // Draw ALL links from snapshot (not just filtered) so highlighting works
-      const linksToUse = allSnapshotLinks.length > 0 ? allSnapshotLinks : linkData;
-      if (linksToUse && linksToUse.length > 0) {
-        linksToUse.forEach(link => {
-          const polyline = L.polyline([[link.from_lat, link.from_lon], [link.to_lat, link.to_lon]], { color: '#a855f7', weight: 3, opacity: 0, dashArray: '5, 10' }).addTo(map);
-          polyline.fromName = link.from_name;
-          polyline.toName = link.to_name;
-          polyline.bindPopup(`${escapeHtml(link.from_name)} ↔ ${escapeHtml(link.to_name)}<br>Count: ${link.count}`);
-          linkLines.push(polyline);
+      // Draw paths
+      if (pathData && pathData.length > 0) {
+        const maxHops = Math.max(...pathData.map(p => p.hops || 1), 1);
+        pathData.forEach(path => {
+          const coords = path.coords || path.coordinates;
+          if (!coords || coords.length < 2) return;
+          const latlngs = coords.map(c => [c.lat, c.lon]);
+          const ratio = 1 - ((path.hops - 2) / Math.max(maxHops - 2, 1));
+          const color = getColor(Math.max(0, Math.min(1, ratio)));
+          const polyline = L.polyline(latlngs, { color: color, weight: 3, opacity: 0, dashArray: '8, 8' }).addTo(map);
+          polyline.pathNodes = coords.map(c => c.name);
+          polyline.sender = path.sender;
+          polyline.bindPopup(`<div style="text-align:center;"><strong>${escapeHtml(path.sender)}</strong><br><span style="color:${color};font-size:18px;font-weight:bold;">${path.hops}</span> hops</div>`);
+          pathLines.push(polyline);
         });
       }
 
-      nodeData.forEach(node => {
-        const ratio = node.link_count / maxLinks;
-        const marker = L.circleMarker([node.lat, node.lon], { radius: 4, fillColor: getColor(ratio), color: '#000', weight: 1, opacity: 1, fillOpacity: 0.9 }).addTo(map);
-        marker.bindPopup(`<div style="text-align:center;"><strong>${escapeHtml(node.name)}</strong><br><span style="color:${getColor(ratio)};font-size:18px;font-weight:bold;">${node.link_count}</span> direct links</div>`);
+      const heatData = hopData.map(node => [node.lat, node.lon, node.use_count / maxUses]);
+      heatLayer = L.heatLayer(heatData, { radius: 50, blur: 35, maxZoom: 10, max: 1.0, minOpacity: 0.3,
+        gradient: { 0.0: '#0000ff', 0.25: '#00ffff', 0.5: '#00ff00', 0.75: '#ffff00', 1.0: '#ff0000' }
+      }).addTo(map);
+
+      hopData.forEach(node => {
+        const ratio = node.use_count / maxUses;
+        const marker = L.circleMarker([node.lat, node.lon], { radius: 4, fillColor: getColor(ratio), color: '#000', weight: 1, opacity: markersVisible ? 1 : 0, fillOpacity: markersVisible ? 0.9 : 0 }).addTo(map);
+        marker.bindPopup(`<div style="text-align:center;"><strong>${escapeHtml(node.name)}</strong><br><span style="color:${getColor(ratio)};font-size:18px;font-weight:bold;">${node.use_count}</span> uses</div>`);
         markers.push(marker);
       });
 
       const nodeList = document.getElementById('node-list');
-      const sortedNodes = [...nodeData].sort((a, b) => b.link_count - a.link_count);
+      const sortedNodes = [...hopData].sort((a, b) => b.use_count - a.use_count);
       nodeList.innerHTML = sortedNodes.map(node => {
-        const color = getColor(node.link_count / maxLinks);
-        return `<div class="node-item" data-node-name="${escapeHtml(node.name)}" onclick="highlightNodeLinks('${escapeHtml(node.name)}')"><div class="node-dot" style="background:${color};"></div><span class="node-name" title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span><span class="node-count">${node.link_count}</span></div>`;
+        const color = getColor(node.use_count / maxUses);
+        return `<div class="node-item" data-node-name="${escapeHtml(node.name)}" onclick="highlightNodePaths('${escapeHtml(node.name)}')"><div class="node-dot" style="background:${color};"></div><span class="node-name" title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span><span class="node-count">${node.use_count}</span></div>`;
       }).join('');
 
-      if (fitBounds && nodeData.length > 1) map.fitBounds(L.latLngBounds(nodeData.map(d => [d.lat, d.lon])), { padding: [50, 50] });
+      if (fitBounds && hopData.length > 1) map.fitBounds(L.latLngBounds(hopData.map(d => [d.lat, d.lon])), { padding: [50, 50] });
     }
 
     function fetchLiveData() {
-      fetch('/local/meshcore_directlinks_data.json?t=' + Date.now())
+      fetch('/local/meshcore_heatmap_data.json?t=' + Date.now())
         .then(r => r.json())
         .then(data => {
           if (data.nodes && Array.isArray(data.nodes)) {
             if (data.threshold_hours) document.getElementById('threshold-hours').textContent = data.threshold_hours;
             if (liveMode) {
-              nodeData = data.nodes;
-              linkData = data.links || [];
+              hopData = data.nodes;
+              pathData = data.paths || [];
               updateMap(markers.length === 0);
             }
           }
@@ -447,12 +433,12 @@
     setInterval(loadThreshold, 60000);  // Update threshold every minute
 
     // Initial live data
-    fetch('/local/meshcore_directlinks_data.json')
+    fetch('/local/meshcore_heatmap_data.json')
       .then(r => r.json())
       .then(data => {
         if (data.nodes && Array.isArray(data.nodes)) {
-          nodeData = data.nodes;
-          linkData = data.links || [];
+          hopData = data.nodes;
+          pathData = data.paths || [];
           if (data.threshold_hours) document.getElementById('threshold-hours').textContent = data.threshold_hours;
           updateMap(true);
         }
