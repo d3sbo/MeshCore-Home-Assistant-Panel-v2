@@ -62,13 +62,26 @@ class MeshCoreNodeMapExport(hass.Hass):
                 last_advert = self.normalize_timestamp(attrs.get("last_advert", 0))
                 node_type = attrs.get("node_type_str", "Unknown")
                 
-                # Filter by threshold
-                if not last_advert or (now_ts - last_advert) > threshold_sec:
+                # Use HA's last_updated as fallback when node clock is wrong (future timestamp)
+                last_seen = last_advert
+                if last_advert and last_advert > now_ts:
+                    # Node clock is ahead - use HA's last_updated instead
+                    ha_updated = state_data.get("last_updated")
+                    if ha_updated:
+                        try:
+                            from datetime import datetime
+                            if isinstance(ha_updated, str):
+                                dt = datetime.fromisoformat(ha_updated.replace("Z", "+00:00"))
+                                last_seen = dt.timestamp()
+                        except Exception:
+                            last_seen = now_ts  # fallback to now
+                
+                # Filter by threshold using corrected timestamp
+                if not last_advert or (now_ts - last_seen) > threshold_sec:
                     continue
                 
                 if lat and lon:
-                    # Calculate age in hours (clamp to 0 for nodes with future timestamps)
-                    age_hours = max(0, (now_ts - last_advert) / 3600) if last_advert else 0
+                    age_hours = max(0, (now_ts - last_seen) / 3600) if last_seen else 0
                     
                     node_data.append({
                         "name": name,
@@ -76,6 +89,7 @@ class MeshCoreNodeMapExport(hass.Hass):
                         "lon": float(lon),
                         "node_type": node_type.lower() if node_type else "unknown",
                         "last_advert": last_advert,
+                        "last_seen": last_seen,
                         "age_hours": round(age_hours, 1)
                     })
             
