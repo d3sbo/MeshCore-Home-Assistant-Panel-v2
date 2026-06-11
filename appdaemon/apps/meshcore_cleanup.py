@@ -12,11 +12,17 @@ class MeshCoreCleanup(hass.Hass):
     def initialize(self):
         self.log("MeshCoreCleanup initialized")
         
-        # Run daily at 3am
-        self.run_daily(self.cleanup_old_contacts, "03:00:00")
+        # Run daily at configured time (default 03:00)
+        self.cleanup_time = self.args.get("cleanup_time", "03:00:00")
+        self.run_daily(self.cleanup_old_contacts, self.cleanup_time)
         
-        # Also run 60 seconds after startup
-        self.run_in(self.cleanup_old_contacts, 60)
+        self.log(f"Cleanup scheduled daily at {self.cleanup_time}")
+
+    def normalize_timestamp(self, ts):
+        """Convert millisecond timestamps to seconds if needed"""
+        if ts and isinstance(ts, (int, float)) and ts > 1e12:
+            return ts / 1000.0
+        return ts
 
     def cleanup_old_contacts(self, kwargs=None):
         """Remove contact entities older than 30 days from HA and device"""
@@ -37,8 +43,8 @@ class MeshCoreCleanup(hass.Hass):
                 
                 checked_count += 1
                 attrs = state_data.get("attributes", {}) if state_data else {}
-                last_advert = attrs.get("last_advert")
-                last_message = attrs.get("last_message")
+                last_advert = self.normalize_timestamp(attrs.get("last_advert"))
+                last_message = self.normalize_timestamp(attrs.get("last_message"))
                 pubkey_prefix = attrs.get("pubkey_prefix")
                 name = attrs.get("friendly_name", entity_id)
                 
