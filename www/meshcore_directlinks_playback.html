@@ -128,7 +128,7 @@
     .threshold-control label { font-size: 10px; color: #888; }
     .threshold-slider { width: 70px; cursor: pointer; }
     .threshold-value { font-size: 11px; color: #a855f7; min-width: 32px; }
-    /* CartoDB dark_all tiles — no invert filter needed */
+    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.2); }
     .leaflet-control-attribution { background: rgba(30, 30, 50, 0.8) !important; color: #666 !important; }
     .leaflet-control-attribution a { color: #888 !important; }
   </style>
@@ -173,23 +173,20 @@
   </div>
 
   <script>
-    // ── XSS fix (CVE-2026-45323 class) ───────────────────────────────────────
-    // adv_name and other mesh-sourced fields are not sanitised by the MeshCore
-    // firmware, meshcore_py SDK, or the HA integration. Escape every value
-    // before interpolating it into HTML to prevent script injection.
-    function escapeHtml(v) {
-      if (v === null || v === undefined) return "";
-      return String(v)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-    }
-    // ── End XSS fix ──────────────────────────────────────────────────────────
+    const map = L.map('map', { center: [52.3, 0], zoom: 9, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
-    const map = L.map('map', { center: [52.32, -0.19], zoom: 10, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CartoDB', subdomains: 'abcd', maxZoom: 19, updateWhenIdle: true, keepBuffer: 1 }).addTo(map);
+    
+    // XSS protection - escape HTML entities in user-controlled strings
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     let nodeData = [], linkData = [], heatLayer = null, markers = [], linkLines = [];
     let selectedNode = null;
@@ -406,7 +403,7 @@
           const polyline = L.polyline([[link.from_lat, link.from_lon], [link.to_lat, link.to_lon]], { color: '#a855f7', weight: 3, opacity: 0, dashArray: '5, 10' }).addTo(map);
           polyline.fromName = link.from_name;
           polyline.toName = link.to_name;
-          polyline.bindPopup(`${escapeHtml(link.from_name)} ↔ ${escapeHtml(link.to_name)}<br>Count: ${escapeHtml(String(link.count))}`);
+          polyline.bindPopup(`${escapeHtml(link.from_name)} ↔ ${escapeHtml(link.to_name)}<br>Count: ${link.count}`);
           linkLines.push(polyline);
         });
       }
@@ -414,7 +411,7 @@
       nodeData.forEach(node => {
         const ratio = node.link_count / maxLinks;
         const marker = L.circleMarker([node.lat, node.lon], { radius: 4, fillColor: getColor(ratio), color: '#000', weight: 1, opacity: 1, fillOpacity: 0.9 }).addTo(map);
-        marker.bindPopup(`<div style="text-align:center;"><strong>${escapeHtml(node.name)}</strong><br><span style="color:${getColor(ratio)};font-size:18px;font-weight:bold;">${escapeHtml(String(node.link_count))}</span> direct links</div>`);
+        marker.bindPopup(`<div style="text-align:center;"><strong>${escapeHtml(node.name)}</strong><br><span style="color:${getColor(ratio)};font-size:18px;font-weight:bold;">${node.link_count}</span> direct links</div>`);
         markers.push(marker);
       });
 
@@ -422,10 +419,10 @@
       const sortedNodes = [...nodeData].sort((a, b) => b.link_count - a.link_count);
       nodeList.innerHTML = sortedNodes.map(node => {
         const color = getColor(node.link_count / maxLinks);
-        return `<div class="node-item" data-node-name="${escapeHtml(node.name)}" onclick="highlightNodeLinks(this.dataset.nodeName)"><div class="node-dot" style="background:${color};"></div><span class="node-name" title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span><span class="node-count">${escapeHtml(String(node.link_count))}</span></div>`;
+        return `<div class="node-item" data-node-name="${escapeHtml(node.name)}" onclick="highlightNodeLinks('${escapeHtml(node.name)}')"><div class="node-dot" style="background:${color};"></div><span class="node-name" title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span><span class="node-count">${node.link_count}</span></div>`;
       }).join('');
 
-      if (fitBounds && nodeData.length > 1) { const b = L.latLngBounds(nodeData.map(d => [d.lat, d.lon])); b.getNorthEast().distanceTo(b.getSouthWest()) > 500000 ? map.setView([52.32, -0.19], 10) : map.fitBounds(b, { padding: [50, 50] }); }
+      if (fitBounds && nodeData.length > 1) map.fitBounds(L.latLngBounds(nodeData.map(d => [d.lat, d.lon])), { padding: [50, 50] });
     }
 
     function fetchLiveData() {
