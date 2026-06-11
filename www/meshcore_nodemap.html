@@ -216,6 +216,17 @@
     }).addTo(map);
 
     let nodeData = [];
+
+    // XSS protection - escape HTML entities in user-controlled strings
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
     let markers = {};  // Keyed by node type
     let visibleTypes = {
       'repeater': true,
@@ -369,7 +380,7 @@
         marker.bindPopup(`
           <div style="text-align: center;">
             <span style="font-size: 24px;">${icon}</span><br>
-            <strong>${node.name}</strong><br>
+            <strong>${escapeHtml(node.name)}</strong><br>
             <span style="font-size: 11px; color: #888;">${node.node_type}</span><br>
             <span style="font-size: 11px; color: #888;">${popupAge}</span>
           </div>
@@ -391,7 +402,7 @@
       
       nodeList.innerHTML = sortedByRecent.slice(0, 50).map(node => {
         const icon = getIcon(node.node_type);
-        const safeName = node.name.replace(/'/g, "\\'");
+        const safeName = escapeHtml(node.name);
         const ageSec = nowSec - (node.last_seen || node.last_advert || nowSec);
         let ageStr;
         if (ageSec < 0) {
@@ -412,7 +423,7 @@
         return `
           <div class="node-item">
             <span class="node-icon-small">${icon}</span>
-            <span class="node-name" title="${node.name}" onclick="highlightNode('${safeName}', ${node.lat}, ${node.lon})">${node.name}</span>
+            <span class="node-name" title="${safeName}" onclick="highlightNode('${safeName}', ${node.lat}, ${node.lon})">${safeName}</span>
             <span class="node-age">${ageStr}</span>
           </div>
         `;
