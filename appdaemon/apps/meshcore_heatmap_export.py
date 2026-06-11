@@ -18,7 +18,6 @@ class MeshCoreHeatmapExport(hass.Hass):
         self.run_every(self.export_heatmap_data, "now+60", 300)
         
         # Export when hop entities sensor updates
-        self.listen_state(self.export_heatmap_data, "sensor.meshcore_hop_entities")
         
         # Export when threshold changes
         self.listen_state(self.export_heatmap_data, "input_number.meshcore_heatmap_threshold_hours")
@@ -69,9 +68,11 @@ class MeshCoreHeatmapExport(hass.Hass):
             # Build pubkey prefix -> coords lookup from contact sensors
             prefix_to_coords = {}
             for entity_id, state_data in all_states.items():
-                if not (entity_id.startswith("binary_sensor.meshcore_") and "_contact" in entity_id):
+                if not entity_id.startswith("binary_sensor.meshcore_"):
                     continue
                 attrs = state_data.get("attributes", {}) if state_data else {}
+                if not attrs.get("pubkey_prefix") or not attrs.get("last_advert"):
+                    continue
                 pubkey = attrs.get("pubkey_prefix", "").lower()
                 lat = attrs.get("adv_lat") or attrs.get("latitude")
                 lon = attrs.get("adv_lon") or attrs.get("longitude")
