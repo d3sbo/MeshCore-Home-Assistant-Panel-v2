@@ -23,6 +23,9 @@ class MeshCoreSnapshotRecorder(hass.Hass):
         self.hops_persist_file = f"{self.www_path}/meshcore_hops_data.json"
         self.directlinks_persist_file = f"{self.www_path}/meshcore_directlinks_persist.json"
         
+        # Live export file (contains threshold-filtered paths)
+        self.heatmap_export_file = f"{self.www_path}/meshcore_heatmap_data.json"
+        
         # History output files
         self.heatmap_history_file = f"{self.www_path}/meshcore_heatmap_history.json"
         self.directlinks_history_file = f"{self.www_path}/meshcore_directlinks_history.json"
@@ -48,6 +51,12 @@ class MeshCoreSnapshotRecorder(hass.Hass):
         
         # Listen for MeshCore events to capture on message activity
         self.listen_event(self.on_meshcore_event, "meshcore_raw_event")
+
+    def normalize_timestamp(self, ts):
+        """Convert millisecond timestamps to seconds if needed"""
+        if ts and isinstance(ts, (int, float)) and ts > 1e12:
+            return ts / 1000.0
+        return ts
         
     def load_history(self, filepath):
         """Load snapshot history from file"""
@@ -181,18 +190,28 @@ class MeshCoreSnapshotRecorder(hass.Hass):
                     self.log(f"Heatmap data unchanged, skipping snapshot ({len(self.heatmap_history)} total)")
                     return  # No change, skip
             
+            # Read paths from the live heatmap export file
+            paths = []
+            try:
+                if os.path.exists(self.heatmap_export_file):
+                    with open(self.heatmap_export_file, 'r') as f:
+                        export_data = json.load(f)
+                    paths = export_data.get("paths", [])
+            except Exception as e:
+                self.log(f"Could not read paths from heatmap export: {e}", level="WARNING")
+
             # Create snapshot with ALL data (no threshold filtering)
             snapshot = {
                 "timestamp": time.time(),
                 "nodes": nodes,
-                "paths": [],  # Paths would need separate handling
+                "paths": paths,
                 "threshold_hours": None  # Raw data - no threshold applied
             }
             
             self.heatmap_history.append(snapshot)
             self.save_history(self.heatmap_history_file, self.heatmap_history)
             
-            self.log(f"Heatmap snapshot taken: {len(self.heatmap_history)} total ({len(nodes)} nodes)")
+            self.log(f"Heatmap snapshot taken: {len(self.heatmap_history)} total ({len(nodes)} nodes, {len(paths)} paths)")
             
         except Exception as e:
             self.log(f"Error taking heatmap snapshot: {e}", level="ERROR")
@@ -220,15 +239,17 @@ class MeshCoreSnapshotRecorder(hass.Hass):
             try:
                 all_states = self.get_state()
                 for entity_id, state_data in all_states.items():
-                    if not (entity_id.startswith("binary_sensor.meshcore_") and "_contact" in entity_id):
+                    if not entity_id.startswith("binary_sensor.meshcore_"):
                         continue
                     attrs = state_data.get("attributes", {})
+                    if not attrs.get("pubkey_prefix") or not attrs.get("last_advert"):
+                        continue
                     pubkey = attrs.get("pubkey_prefix", "")
                     lat = attrs.get("adv_lat")
                     lon = attrs.get("adv_lon")
                     name = attrs.get("adv_name", "Unknown")
                     node_type = attrs.get("node_type_str", "Unknown")
-                    last_advert = attrs.get("last_advert", 0)
+                    last_advert = self.normalize_timestamp(attrs.get("last_advert", 0))
                     
                     if pubkey and lat and lon:
                         coord_lookup[pubkey[:2]] = {
