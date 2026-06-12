@@ -35,7 +35,7 @@ class MeshCoreHops(hass.Hass):
         self.listen_event(self.handle_raw_event, "meshcore_raw_event")
         
         # Listen for meshcore contact sensor changes only
-        self.listen_state(self.handle_contact_update, "binary_sensor.meshcore_", attribute="all")
+        self.listen_state(self.handle_contact_update, "binary_sensor", attribute="all")
         
         # Periodic persistence save
         self.run_every(self.save_persisted_data, "now+120", 300)  # Every 5 minutes
@@ -312,8 +312,8 @@ class MeshCoreHops(hass.Hass):
             text = decrypted.get("text", "")
             timestamp = decrypted.get("timestamp")
             
-            # Skip if we couldn't decrypt (no text means wrong channel/key)
-            if not text and not decrypted.get("decrypted"):
+            # Skip if we couldn't decrypt (no decrypted data at all)
+            if not decrypted:
                 self.log(f"RX_LOG: Undecrypted packet, SNR: {snr}, RSSI: {rssi}", level="DEBUG")
                 return
             
