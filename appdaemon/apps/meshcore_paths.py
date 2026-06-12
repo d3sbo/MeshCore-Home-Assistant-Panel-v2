@@ -62,7 +62,7 @@ class MeshCorePathMap(hass.Hass):
             payload = data.get("payload", {})
             decrypted = payload.get("decrypted", {})
 
-            if not decrypted.get("decrypted"):
+            if not decrypted:
                 return
 
             text = decrypted.get("text", "")
