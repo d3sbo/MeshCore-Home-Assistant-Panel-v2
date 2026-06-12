@@ -52,8 +52,8 @@ class MeshCoreDirectLinksExport(hass.Hass):
             payload = data.get("payload", {})
             decrypted = payload.get("decrypted", {})
 
-            # Skip undecrypted packets
-            if not decrypted.get("decrypted"):
+            # Skip if no decrypted data
+            if not decrypted:
                 return
 
             parsed = payload.get("parsed", {})
