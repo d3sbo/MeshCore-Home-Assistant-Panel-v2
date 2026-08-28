@@ -92,6 +92,7 @@ wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/ma
 wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_nodemap_export.py
 wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_directlinks_export.py
 wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_snapshot_recorder.py
+wget https://raw.githubusercontent.com/d3sbo/MeshCore-Home-Assistant-Panel-v2/main/appdaemon/apps/meshcore_map_config.py
 ```
 
 Copy the `.py` files to your AppDaemon apps folder:
@@ -119,6 +120,7 @@ meshcore_heatmap_export.py    # Heatmap data export
 meshcore_nodemap_export.py    # Node map data export
 meshcore_directlinks_export.py # Direct links data export
 meshcore_snapshot_recorder.py  # Playback recording
+meshcore_map_config.py         # Writes CARTO API key config for the maps
 ```
 
 You can copy files using:
@@ -229,7 +231,14 @@ meshcore_directlinks_export:
 meshcore_snapshot_recorder:
   module: meshcore_snapshot_recorder
   class: MeshCoreSnapshotRecorder
+
+meshcore_map_config:
+  module: meshcore_map_config
+  class: MeshCoreMapConfig
+  carto_api_key: "YOUR_CARTO_API_KEY"
 ```
+
+> 🗝️ **CARTO API key (required for the maps):** CARTO's basemap tiles [now require a free API key](https://carto.com/basemaps/apikey/). Request one via the form (5M tiles/month free for non-commercial use — the key is emailed back instantly, no account needed) and paste it into the `meshcore_map_config` block above. The app writes it to `/config/www/meshcore_map_config.json`, where all five map pages pick it up. Without a key the maps fall back to keyless tile URLs, which CARTO may stop serving.
 
 ### 5. Install HTML Map Pages
 
@@ -240,8 +249,10 @@ Copy files from this repo's `www/` folder to your Home Assistant www folder:
 **Important:** Always use `/config/www/` (not the AppDaemon folder!)
 
 ```
-/config/www/meshcore_heatmap_playback.html
 /config/www/meshcore_nodemap.html
+/config/www/meshcore_heatmap.html
+/config/www/meshcore_heatmap_playback.html
+/config/www/meshcore_directlinks.html
 /config/www/meshcore_directlinks_playback.html
 ```
 
@@ -461,9 +472,17 @@ You can monitor callback counts in the AppDaemon admin UI at `http://YOUR_HA_IP:
 3. Clear browser cache or hard refresh (Ctrl+Shift+R)
 4. Check browser console for JavaScript errors (F12)
 
+### Maps load but tiles are grey/blank
+
+CARTO basemaps [require an API key](https://carto.com/basemaps/apikey/). Check that:
+
+* `meshcore_map_config.py` is in your AppDaemon apps folder and configured in `apps.yaml` with your `carto_api_key` (see step 4)
+* `/config/www/meshcore_map_config.json` exists and contains your key (restart AppDaemon if not)
+* You hard-refreshed the dashboard (Ctrl+Shift+R) after updating the HTML files
+
 ### Maps slow to load
 
-The map pages use [CartoDB dark tiles](https://carto.com/basemaps/) which load natively dark without any CSS filter. If maps are still slow:
+The map pages use [CARTO dark tiles](https://carto.com/basemaps/) which load natively dark without any CSS filter. If maps are still slow:
 
 * Use a dedicated browser profile without extensions — password manager extensions (e.g. Bitwarden) scan the DOM continuously and significantly slow down complex pages like HA
 * The HTML files use `updateWhenIdle: true` so tiles only fetch when panning stops rather than continuously while moving
