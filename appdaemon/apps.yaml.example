@@ -31,3 +31,10 @@ meshcore_nodemap_export:
 meshcore_directlinks_export:
   module: meshcore_directlinks_export
   class: MeshCoreDirectLinksExport
+
+meshcore_map_config:
+  module: meshcore_map_config
+  class: MeshCoreMapConfig
+  # CARTO basemaps now require an API key.
+  # Get a free one (5M tiles/month) from https://carto.com/basemaps/apikey/
+  carto_api_key: "your-carto-api-key"
