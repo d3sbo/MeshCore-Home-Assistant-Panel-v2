@@ -128,7 +128,7 @@
     .threshold-control label { font-size: 10px; color: #888; }
     .threshold-slider { width: 70px; cursor: pointer; }
     .threshold-value { font-size: 11px; color: #a855f7; min-width: 32px; }
-    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.2); }
+    /* Dark tiles natively - no CSS filter needed */
     .leaflet-control-attribution { background: rgba(30, 30, 50, 0.8) !important; color: #666 !important; }
     .leaflet-control-attribution a { color: #888 !important; }
   </style>
@@ -174,7 +174,15 @@
 
   <script>
     const map = L.map('map', { center: [52.3, 0], zoom: 9, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    // CARTO requires an API key (set carto_api_key in apps.yaml,
+    // written to meshcore_map_config.json by the meshcore_map_config app)
+    fetch('/local/meshcore_map_config.json')
+      .then(r => r.ok ? r.json() : {})
+      .catch(() => ({}))
+      .then(cfg => {
+        const cartoKey = cfg && cfg.carto_api_key ? '?key=' + encodeURIComponent(cfg.carto_api_key) : '';
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' + cartoKey, { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+      });
 
     
     // XSS protection - escape HTML entities in user-controlled strings
