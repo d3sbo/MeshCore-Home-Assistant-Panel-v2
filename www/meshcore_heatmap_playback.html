@@ -167,7 +167,15 @@
 
   <script>
     const map = L.map('map', { center: [52.5, -1], zoom: 7, zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+    // CARTO requires an API key (set carto_api_key in apps.yaml,
+    // written to meshcore_map_config.json by the meshcore_map_config app)
+    fetch('/local/meshcore_map_config.json')
+      .then(r => r.ok ? r.json() : {})
+      .catch(() => ({}))
+      .then(cfg => {
+        const cartoKey = cfg && cfg.carto_api_key ? '?key=' + encodeURIComponent(cfg.carto_api_key) : '';
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' + cartoKey, { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+      });
 
     
     // XSS protection - escape HTML entities in user-controlled strings
